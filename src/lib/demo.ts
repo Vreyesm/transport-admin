@@ -1,5 +1,6 @@
 import { Data } from "./types";
-import { localDate, toUTC } from "./time";
+import { localDate } from "./time";
+import { demoUsage } from "./demo-usage";
 export function demoData(): Data {
   const today = localDate(new Date());
   return {
@@ -44,19 +45,20 @@ export function demoData(): Data {
         archived: false,
         photos: [],
       },
-    ],
-    occupations: [
       {
-        id: "demo-event",
-        vehicle_id: "demo-1",
-        kind: "reservation",
-        starts_at: toUTC(today + "T09:00"),
-        ends_at: toUTC(today + "T18:00"),
-        cancelled: false,
-        activity: "Traslado comunitario",
-        destination: "Centro comunal",
-        organization: "Organización de ejemplo",
+        id: "demo-4",
+        name: "Minibús municipal 04",
+        plate: "RXYZ-76",
+        type: "minibus",
+        brand: "Mercedes-Benz",
+        model: "Sprinter",
+        year: 2024,
+        capacity: 19,
+        features: "Aire acondicionado · Acceso asistido",
+        archived: false,
+        photos: [],
       },
     ],
+    occupations: demoUsage(today),
   };
 }

@@ -17,7 +17,7 @@ Abre http://localhost:3000. Sin variables de Supabase funciona en **modo demostr
 ## Conectar Supabase
 
 1. Crea un proyecto Supabase. Ejecuta en SQL Editor, en orden, los archivos de `supabase/migrations/`. También pueden aplicarse con Supabase CLI y su flujo habitual de migraciones. No vuelvas a ejecutarlos en un proyecto ya migrado.
-2. Solo en desarrollo, ejecuta `supabase/seed.sql` para cargar ejemplos ficticios.
+2. Solo en desarrollo, ejecuta `supabase/seed.sql` y luego `supabase/seed-usage.sql` para cargar ejemplos ficticios. El segundo agrega dos vehículos y 27 viajes/bloqueos del mes actual en Chile, incluidos viajes de varios días, día completo, horarios consecutivos y una cancelación. Es aditivo e idempotente: no modifica registros existentes y omite ejemplos en conflicto.
 3. Copia la URL y la clave pública **publishable** (o anon/legacy JWT) del proyecto a `.env.local`:
 
 ```dotenv
