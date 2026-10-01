@@ -18,7 +18,7 @@ Abre http://localhost:3000. Sin variables de Supabase funciona en **modo demostr
 
 1. Crea un proyecto Supabase. Ejecuta en SQL Editor, en orden, los archivos de `supabase/migrations/`. También pueden aplicarse con Supabase CLI y su flujo habitual de migraciones. No vuelvas a ejecutarlos en un proyecto ya migrado.
 2. Solo en desarrollo, ejecuta `supabase/seed.sql` para cargar ejemplos ficticios.
-3. Copia la URL y la clave pública **anon/legacy JWT** del proyecto a `.env.local`:
+3. Copia la URL y la clave pública **publishable** (o anon/legacy JWT) del proyecto a `.env.local`:
 
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://TU-PROYECTO.supabase.co
@@ -61,7 +61,7 @@ Las pruebas ejecutan PostgreSQL embebido con PGlite y `btree_gist`. Aplican las 
 
 ## Despliegue económico
 
-Puedes alojar Next.js en cualquier servicio compatible con Node.js y usar Supabase administrado. No requiere workers ni servicios adicionales. No se ha contratado ni publicado infraestructura.
+Puedes alojar Next.js en cualquier servicio compatible con Node.js y usar Supabase administrado. No requiere workers ni servicios adicionales. La demo usa Vercel Hobby y Supabase Free; consulta su configuración en [docs/DEMO.md](docs/DEMO.md).
 
 ```powershell
 npm ci
