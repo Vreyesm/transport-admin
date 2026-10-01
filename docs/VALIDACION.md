@@ -23,6 +23,6 @@ Vercel compiló y publicó la implementación en https://transport-admin-liart.v
 
 ## Pendiente
 
-La creación de la cuenta administrativa requiere intervención del titular para su contraseña. Falta comprobar login y subida a Storage con esa cuenta, cerrar el registro público y configurar Site URL. La sesión del panel Supabase expiró durante la configuración.
+El titular creó su cuenta Auth; su perfil administrativo se habilitó en Supabase. Registro público desactivado y Site URL configurada. Falta comprobar login y subida a Storage con esa cuenta; la contraseña solo la introduce el titular.
 
 PGlite serializa consultas: las inserciones competidoras validan la restricción de exclusión, pero no simulan dos sesiones PostgreSQL independientes. Falta probar concurrencia con dos conexiones reales. No se construyó la imagen Docker.
