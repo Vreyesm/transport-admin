@@ -15,6 +15,14 @@
 - Subida y guardado de una fotografía PNG ficticia, marcada como principal.
 - Vista móvil de 390 × 844: navegación, filtros y agenda; el calendario usa desplazamiento horizontal dentro de su contenedor sin desbordar la página.
 
-## Pendiente de verificar con infraestructura real
+## Comprobaciones con infraestructura real
 
-No hay credenciales Supabase configuradas. Auth, subida a Storage y comportamiento de múltiples conexiones deben comprobarse con un proyecto de pruebas antes del despliegue. PGlite serializa consultas: las inserciones competidoras validan la restricción de exclusión, pero no simulan dos sesiones PostgreSQL independientes. No se construyó la imagen Docker ni se publicó infraestructura.
+Ambas migraciones y los datos ficticios se instalaron correctamente en Supabase. La RPC pública devuelve dos vehículos y una ocupación sin actividad ni contactos. Las llamadas anónimas directas a las cinco tablas internas probadas reciben `42501` (permiso denegado).
+
+Vercel compiló y publicó la implementación en https://transport-admin-liart.vercel.app. Una sesión de navegador sin login comprobó el calendario conectado a Supabase y el detalle público limitado a vehículo e intervalo.
+
+## Pendiente
+
+La creación de la cuenta administrativa requiere intervención del titular para su contraseña. Falta comprobar login y subida a Storage con esa cuenta, cerrar el registro público y configurar Site URL. La sesión del panel Supabase expiró durante la configuración.
+
+PGlite serializa consultas: las inserciones competidoras validan la restricción de exclusión, pero no simulan dos sesiones PostgreSQL independientes. Falta probar concurrencia con dos conexiones reales. No se construyó la imagen Docker.

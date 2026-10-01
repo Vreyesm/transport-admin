@@ -14,3 +14,5 @@ Los ejemplos son ficticios. La administración requiere una cuenta creada en Sup
 ## Verificación contra Supabase real
 
 La función pública devuelve dos vehículos y una ocupación sin actividad ni contactos. Las llamadas anónimas directas a `vehicles`, `occupations`, `admin_profiles`, `audit_log` y `vehicle_photos` reciben permiso denegado (`42501`).
+
+La primera implementación (`de7cbb2`) se promovió al dominio público desde la rama del PR. La sesión Supabase expiró antes de crear el administrador, cerrar registro público y configurar Site URL; esos pasos siguen pendientes.
