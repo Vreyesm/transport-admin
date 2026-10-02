@@ -26,3 +26,11 @@ Vercel compiló y publicó la implementación en https://transport-admin-liart.v
 El titular creó su cuenta Auth; su perfil administrativo se habilitó en Supabase. Registro público desactivado y Site URL configurada. Falta comprobar login y subida a Storage con esa cuenta; la contraseña solo la introduce el titular.
 
 PGlite serializa consultas: las inserciones competidoras validan la restricción de exclusión, pero no simulan dos sesiones PostgreSQL independientes. Falta probar concurrencia con dos conexiones reales. No se construyó la imagen Docker.
+
+## Validación de los fixes
+
+14 pruebas aprobadas. Las pruebas adicionales cubren fechas civiles del calendario desde cinco zonas horarias, invalidación de consultas y escrituras al cerrar sesión, respuestas fuera de orden, limpieza de fotos tras guardado o conflicto, interrupción de sesión durante una subida y avisos ante errores de limpieza. La prueba de base de datos aplica la tercera migración y comprueba rechazo de ediciones obsoletas, conservación de cancelaciones, archivado con asignaciones pendientes y política de Storage que conserva fotos referenciadas.
+
+En navegador local de demostración se comprobó que alternar Días completos conserva fechas y horas editadas, que el archivado con viajes pendientes muestra el rechazo en el modal y que cerrar sesión retira los controles administrativos. Se corrigió también el reinicio del foco del modal al editar.
+
+La migración `202610020001_safe_updates.sql` se validó en PGlite; queda pendiente aplicarla a Supabase antes de desplegar el cliente. Esta revisión no modificó la infraestructura real. Sigue pendiente probar carreras con dos conexiones PostgreSQL independientes y Storage/Auth real con una cuenta administrativa.

@@ -33,7 +33,7 @@ export async function loadData(admin: boolean): Promise<Data> {
   const results = await Promise.all([
     supabase.from("vehicles").select("*"),
     supabase.from("occupations").select("*"),
-    supabase.from("settings").select("name,color,logo").single(),
+    supabase.from("settings").select("name,color,logo,version").single(),
   ]);
   for (const r of results) if (r.error) throw r.error;
   return {

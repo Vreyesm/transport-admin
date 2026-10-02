@@ -1,4 +1,5 @@
 export type Vehicle = {
+  version?: number;
   id: string;
   name: string;
   plate: string;
@@ -13,6 +14,7 @@ export type Vehicle = {
   photos: string[];
 };
 export type Occupation = {
+  version?: number;
   id: string;
   vehicle_id: string;
   kind: "reservation" | "maintenance";
@@ -26,7 +28,12 @@ export type Occupation = {
   contact?: string;
   notes?: string;
 };
-export type Settings = { name: string; color: string; logo: string };
+export type Settings = {
+  name: string;
+  color: string;
+  logo: string;
+  version?: number;
+};
 export type Data = {
   vehicles: Vehicle[];
   occupations: Occupation[];

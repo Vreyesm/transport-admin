@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Bus,
@@ -27,9 +27,20 @@ import {
   saveOccupation,
   saveSettings,
   saveVehicle,
-  uploadPhoto,
 } from "@/lib/repository";
-import { dayStart, localDate, localInput, pretty, toUTC } from "@/lib/time";
+import { dayStart, localDate, pretty, toUTC } from "@/lib/time";
+
+import {
+  calendarDate,
+  calendarDays,
+  shiftDay,
+  shiftMonth,
+} from "@/lib/calendar";
+import { RequestScope } from "@/lib/requests";
+import { validatePhoto } from "@/modules/fleet/photos";
+import { saveVehicleDraft } from "@/modules/fleet/repository";
+import { OccupationDates } from "./occupation-dates";
+import { SettingsForm } from "./settings-form";
 
 type Section = "calendar" | "fleet" | "settings";
 const empty: Data = {
@@ -49,7 +60,7 @@ export default function TransportApp({
     [ready, setReady] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
-  const [date, setDate] = useState(() => new Date()),
+  const [date, setDate] = useState(() => localDate(new Date())),
     [view, setView] = useState("month"),
     [vehicleFilter, setVehicleFilter] = useState(""),
     [type, setType] = useState(""),
@@ -60,39 +71,89 @@ export default function TransportApp({
     [busy, setBusy] = useState(false),
     [allDay, setAllDay] = useState(false);
   const canEdit = admin && authorized;
+  const access = useRef(false);
+  const [sessionEpoch, setSessionEpoch] = useState(0);
+  const requests = useRef(new RequestScope());
+  const checks = useRef(new RequestScope());
+  const pendingPhotos = useRef(new Map<string, File>());
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
+  const [settingsEditor, setSettingsEditor] = useState(0);
+  const clearPhotos = useCallback(() => {
+    for (const url of pendingPhotos.current.keys()) URL.revokeObjectURL(url);
+    pendingPhotos.current.clear();
+  }, []);
+  const resetAccess = useCallback(() => {
+    access.current = false;
+    requests.current.invalidate();
+    checks.current.invalidate();
+    setAuthorized(false);
+    setData(empty);
+    setReady(false);
+    setLastUpdated(null);
+    setStale(false);
+    setNotice("");
+    setVehicle(null);
+    setOccupation(null);
+    setSessionEpoch((epoch) => epoch + 1);
+    clearPhotos();
+  }, [clearPhotos]);
   const refresh = useCallback(async () => {
+    const ticket = requests.current.begin();
     try {
-      setData(await loadData(canEdit));
+      const loaded = await loadData(canEdit && access.current);
+      if (!ticket.current()) return;
+      setData(loaded);
+      setLastUpdated(new Date().toISOString());
+      setStale(false);
       setError("");
     } catch (e) {
+      if (!ticket.current()) return;
       setError(message(e));
+      setStale(true);
     } finally {
-      setReady(true);
+      if (ticket.current()) setReady(true);
     }
   }, [canEdit]);
   useEffect(() => {
+    const scope = requests.current;
+    const authChecks = checks.current;
     if (!supabase) {
-      const timer = setTimeout(
-        () =>
-          setAuthorized(
-            sessionStorage.getItem("transport-demo-admin") === "true",
-          ),
-        0,
-      );
+      const timer = setTimeout(() => {
+        access.current =
+          sessionStorage.getItem("transport-demo-admin") === "true";
+        if (access.current) {
+          scope.invalidate();
+          setReady(false);
+          setSessionEpoch((epoch) => epoch + 1);
+        }
+        setAuthorized(access.current);
+      }, 0);
       return () => clearTimeout(timer);
     }
     let active = true;
-    const verify = async (id?: string) => {
-      setAuthorized(false);
-      setVehicle(null);
-      setOccupation(null);
+    let authEvents = 0;
+    let currentId: string | undefined;
+    let initialized = false;
+    const verify = async (
+      id: string | undefined,
+      ticket: ReturnType<RequestScope["begin"]>,
+    ) => {
+      if (!active || !ticket.current()) return;
       if (!id) return;
       const { data, error } = await supabase!
         .from("admin_profiles")
         .select("id")
         .eq("id", id)
         .maybeSingle();
-      if (active) {
+      if (active && ticket.current()) {
+        access.current = Boolean(data && !error);
+        if (access.current) {
+          scope.invalidate();
+          setReady(false);
+          setData(empty);
+          setSessionEpoch((epoch) => epoch + 1);
+        }
         setAuthorized(Boolean(data && !error));
         if (!data)
           setError(
@@ -100,20 +161,37 @@ export default function TransportApp({
           );
       }
     };
-    supabase.auth
-      .getSession()
-      .then(({ data }) => void verify(data.session?.user.id));
+    const applySession = (id?: string) => {
+      if (
+        !active ||
+        (initialized && id === currentId && (!id || access.current))
+      )
+        return;
+      initialized = true;
+      currentId = id;
+      resetAccess();
+      const ticket = checks.current.begin();
+      setTimeout(() => void verify(id, ticket), 0);
+    };
+    supabase.auth.getSession().then(({ data }) => {
+      if (!authEvents) applySession(data.session?.user.id);
+    });
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        setTimeout(() => void verify(session?.user.id), 0);
+        authEvents++;
+        applySession(session?.user.id);
       },
     );
     return () => {
       active = false;
+      scope.invalidate();
+      authChecks.invalidate();
+      clearPhotos();
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [resetAccess, clearPhotos]);
   useEffect(() => {
+    const scope = requests.current;
     const timer = setTimeout(() => void refresh(), 0);
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
@@ -122,12 +200,14 @@ export default function TransportApp({
     window.addEventListener("focus", focus);
     window.addEventListener("storage", focus);
     return () => {
+      scope.invalidate();
+      clearPhotos();
       clearTimeout(timer);
       clearInterval(interval);
       window.removeEventListener("focus", focus);
       window.removeEventListener("storage", focus);
     };
-  }, [refresh, date, view]);
+  }, [refresh, clearPhotos, sessionEpoch]);
   const vehicles = data.vehicles.filter(
     (v) =>
       ((canEdit && archived) || !v.archived) &&
@@ -139,7 +219,7 @@ export default function TransportApp({
     (o) => !o.cancelled && vehicles.some((v) => v.id === o.vehicle_id),
   );
   const today = localDate(new Date());
-  const dateKey = localDate(date);
+  const dateKey = date;
   const current = (id: string) =>
     data.occupations.find(
       (o) =>
@@ -158,17 +238,22 @@ export default function TransportApp({
           ? "En uso"
           : "Libre";
   }
-  async function mutate(action: () => Promise<void>) {
+  async function mutate(action: () => Promise<void | string>) {
+    const ticket = requests.current.begin();
     setBusy(true);
     setError("");
     try {
-      await action();
+      const warning = await action();
+      if (!ticket.sameScope()) return;
       await refresh();
-      setNotice("Cambios guardados");
+      if (!ticket.sameScope()) return;
+      setNotice(warning || "Cambios guardados");
+      clearPhotos();
       setVehicle(null);
       setOccupation(null);
+      if (section === "settings") setSettingsEditor((key) => key + 1);
     } catch (e) {
-      setError(message(e));
+      if (ticket.sameScope()) setError(message(e));
     } finally {
       setBusy(false);
     }
@@ -185,21 +270,13 @@ export default function TransportApp({
     });
   }
   function move(amount: number) {
-    const d = new Date(date);
-    if (view === "month") d.setMonth(d.getMonth() + amount, 1);
-    else d.setDate(d.getDate() + amount * (view === "week" ? 7 : 1));
-    setDate(d);
+    setDate(
+      view === "month"
+        ? shiftMonth(date, amount)
+        : shiftDay(date, amount * (view === "week" ? 7 : 1)),
+    );
   }
-  const monthStart = new Date(date.getFullYear(), date.getMonth(), 1, 12);
-  const gridStart = new Date(monthStart);
-  gridStart.setDate(1 - ((monthStart.getDay() + 6) % 7));
-  const weekStart = new Date(date);
-  weekStart.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-  const days = Array.from({ length: view === "week" ? 7 : 42 }, (_, i) => {
-    const d = new Date(view === "week" ? weekStart : gridStart);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
+  const days = calendarDays(date, view === "week");
   function forDay(day: string) {
     return events.filter(
       (o) =>
@@ -285,19 +362,25 @@ export default function TransportApp({
                 : "Configuración"}
           </span>
           <div className="top-actions">
-            <span className="live-dot" />
-            Información actualizada
+            <span className={stale ? "live-dot stale" : "live-dot"} />
+            {stale
+              ? "Sin actualizar"
+              : lastUpdated
+                ? `Actualizado ${new Date(lastUpdated).toLocaleTimeString("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit" })}`
+                : "Cargando información…"}
             {canEdit && (
               <button
                 title="Cerrar sesión"
-                onClick={() => {
-                  if (supabase) void supabase.auth.signOut();
-                  else {
-                    sessionStorage.removeItem("transport-demo-admin");
-                    setAuthorized(false);
-                    setVehicle(null);
-                    setOccupation(null);
-                  }
+                disabled={busy}
+                onClick={async () => {
+                  resetAccess();
+                  if (supabase) {
+                    const { error } = await supabase.auth.signOut();
+                    if (error)
+                      setError(
+                        "No se pudo cerrar la sesión remota. Reintenta cerrar sesión desde este dispositivo.",
+                      );
+                  } else sessionStorage.removeItem("transport-demo-admin");
                 }}
               >
                 <LogOut size={17} />
@@ -377,6 +460,22 @@ export default function TransportApp({
               <p>
                 Ingresa con tu cuenta autorizada para gestionar transportes.
               </p>
+              {configured && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    resetAccess();
+                    const result = await supabase!.auth.signOut();
+                    if (result.error)
+                      setError(
+                        "No se pudo cerrar la sesión remota. Reintenta cuando recuperes la conexión.",
+                      );
+                  }}
+                >
+                  Cerrar sesión de este dispositivo
+                </Button>
+              )}
               {configured ? (
                 <form
                   onSubmit={async (e) => {
@@ -407,6 +506,9 @@ export default function TransportApp({
                 <Button
                   onClick={() => {
                     sessionStorage.setItem("transport-demo-admin", "true");
+                    access.current = true;
+                    requests.current.invalidate();
+                    setReady(false);
                     setAuthorized(true);
                   }}
                 >
@@ -513,7 +615,8 @@ export default function TransportApp({
                   <div className="calendar-toolbar">
                     <div className="date-nav">
                       <h2>
-                        {date.toLocaleDateString("es-CL", {
+                        {calendarDate(date).toLocaleDateString("es-CL", {
+                          timeZone: "UTC",
                           month: "long",
                           year: "numeric",
                         })}
@@ -526,7 +629,7 @@ export default function TransportApp({
                       </button>
                       <Button
                         variant="outline"
-                        onClick={() => setDate(new Date())}
+                        onClick={() => setDate(localDate(new Date()))}
                       >
                         Hoy
                       </Button>
@@ -634,13 +737,13 @@ export default function TransportApp({
                         </div>
                         <div className="day-grid">
                           {days.map((d) => {
-                            const key = localDate(d);
+                            const key = d;
                             return (
                               <div
                                 key={key}
                                 className={
                                   "day " +
-                                  (d.getMonth() !== date.getMonth() &&
+                                  (d.slice(0, 7) !== date.slice(0, 7) &&
                                   view === "month"
                                     ? "outside "
                                     : "") +
@@ -648,7 +751,7 @@ export default function TransportApp({
                                 }
                               >
                                 <div className="day-top">
-                                  <span>{d.getDate()}</span>
+                                  <span>{Number(d.slice(8, 10))}</span>
                                   {canEdit && (
                                     <button
                                       aria-label={"Asignar el " + key}
@@ -753,39 +856,14 @@ export default function TransportApp({
                     Estos datos se mostrarán en la administración y la consulta
                     pública.
                   </p>
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const f = new FormData(e.currentTarget);
-                      void mutate(() =>
-                        saveSettings({
-                          name: String(f.get("name")),
-                          color: String(f.get("color")),
-                          logo: String(f.get("logo")),
-                        }),
-                      );
-                    }}
-                  >
-                    <Field
-                      label="Nombre de la municipalidad"
-                      name="name"
-                      defaultValue={data.settings.name}
-                      required
-                    />
-                    <Field
-                      label="Color principal"
-                      name="color"
-                      type="color"
-                      defaultValue={data.settings.color}
-                    />
-                    <Field
-                      label="URL del logo (HTTPS)"
-                      name="logo"
-                      type="url"
-                      defaultValue={data.settings.logo}
-                    />
-                    <Button disabled={busy}>Guardar configuración</Button>
-                  </form>
+                  <SettingsForm
+                    key={settingsEditor}
+                    initial={data.settings}
+                    busy={busy}
+                    save={(settings) =>
+                      void mutate(() => saveSettings(settings))
+                    }
+                  />
                 </section>
               )}
               {section === "calendar" && canEdit && (
@@ -842,7 +920,12 @@ export default function TransportApp({
       {vehicle && (
         <Modal
           title={canEdit ? "Ficha del vehículo" : vehicle.name}
-          close={() => setVehicle(null)}
+          close={() => {
+            if (!busy) {
+              clearPhotos();
+              setVehicle(null);
+            }
+          }}
         >
           {error && (
             <div className="alert" role="alert">
@@ -854,18 +937,23 @@ export default function TransportApp({
               e.preventDefault();
               const f = new FormData(e.currentTarget);
               void mutate(() =>
-                saveVehicle({
-                  ...vehicle,
-                  name: String(f.get("name")),
-                  plate: String(f.get("plate")).trim().toUpperCase(),
-                  type: f.get("type") as Vehicle["type"],
-                  brand: String(f.get("brand")),
-                  model: String(f.get("model")),
-                  year: Number(f.get("year")),
-                  capacity: Number(f.get("capacity")),
-                  features: String(f.get("features")),
-                  notes: String(f.get("notes")),
-                }),
+                saveVehicleDraft(
+                  {
+                    ...vehicle,
+                    name: String(f.get("name")),
+                    plate: String(f.get("plate")).trim().toUpperCase(),
+                    type: f.get("type") as Vehicle["type"],
+                    brand: String(f.get("brand")),
+                    model: String(f.get("model")),
+                    year: Number(f.get("year")),
+                    capacity: Number(f.get("capacity")),
+                    features: String(f.get("features")),
+                    notes: String(f.get("notes")),
+                  },
+                  pendingPhotos.current,
+                  data.vehicles.find((v) => v.id === vehicle.id)?.photos || [],
+                  requests.current.capture(),
+                ),
               );
             }}
           >
@@ -938,6 +1026,7 @@ export default function TransportApp({
                     <>
                       <button
                         type="button"
+                        disabled={busy}
                         onClick={() =>
                           setVehicle({
                             ...vehicle,
@@ -952,6 +1041,7 @@ export default function TransportApp({
                       </button>
                       <button
                         type="button"
+                        disabled={busy}
                         aria-label="Eliminar foto"
                         onClick={() =>
                           setVehicle({
@@ -975,21 +1065,21 @@ export default function TransportApp({
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
                     disabled={busy}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      setBusy(true);
                       try {
-                        const url = await uploadPhoto(file);
+                        validatePhoto(file);
+                        const url = URL.createObjectURL(file);
+                        pendingPhotos.current.set(url, file);
                         setVehicle({
                           ...vehicle,
                           photos: [...vehicle.photos, url],
                         });
                       } catch (e) {
                         setError(message(e));
-                      } finally {
-                        setBusy(false);
                       }
+                      e.target.value = "";
                     }}
                   />
                 </label>
@@ -1004,6 +1094,9 @@ export default function TransportApp({
                       void mutate(() =>
                         saveVehicle({
                           ...vehicle,
+                          photos:
+                            data.vehicles.find((v) => v.id === vehicle.id)
+                              ?.photos || [],
                           archived: !vehicle.archived,
                         }),
                       )
@@ -1023,7 +1116,9 @@ export default function TransportApp({
           title={
             canEdit ? "Asignación de vehículo" : "Disponibilidad del vehículo"
           }
-          close={() => setOccupation(null)}
+          close={() => {
+            if (!busy) setOccupation(null);
+          }}
         >
           {error && (
             <div className="alert" role="alert">
@@ -1092,41 +1187,13 @@ export default function TransportApp({
                     </select>
                   </label>
                 </div>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={allDay}
-                    onChange={(e) => setAllDay(e.target.checked)}
-                  />
-                  Días completos (incluye el último día)
-                </label>
-                <div className="form-grid" key={String(allDay)}>
-                  <Field
-                    label="Inicio"
-                    name="start"
-                    type={allDay ? "date" : "datetime-local"}
-                    defaultValue={
-                      allDay
-                        ? localInput(occupation.starts_at).slice(0, 10)
-                        : localInput(occupation.starts_at)
-                    }
-                    required
-                  />
-                  <Field
-                    label="Término"
-                    name="end"
-                    type={allDay ? "date" : "datetime-local"}
-                    defaultValue={
-                      allDay
-                        ? localInput(
-                            new Date(
-                              new Date(occupation.ends_at).getTime() - 1,
-                            ).toISOString(),
-                          ).slice(0, 10)
-                        : localInput(occupation.ends_at)
-                    }
-                    required
-                  />
+                <OccupationDates
+                  key={occupation.id}
+                  occupation={occupation}
+                  allDay={allDay}
+                  setAllDay={setAllDay}
+                />
+                <div className="form-grid">
                   <Field
                     label="Actividad / motivo"
                     name="activity"
@@ -1215,9 +1282,7 @@ function message(e: unknown) {
       : "No se pudo completar la operación.";
 }
 function nextDay(day: string) {
-  const d = new Date(day + "T12:00:00Z");
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
+  return shiftDay(day, 1);
 }
 function eventColor(o: Occupation) {
   return o.kind === "maintenance"
@@ -1269,12 +1334,16 @@ function Modal({
   close: () => void;
   children: React.ReactNode;
 }) {
+  const closeRef = useRef(close);
+  useEffect(() => {
+    closeRef.current = close;
+  }, [close]);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const modal = document.querySelector<HTMLElement>(".modal");
     modal?.querySelector<HTMLElement>("button,input,select,textarea")?.focus();
     const fn = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") closeRef.current();
       if (e.key === "Tab") {
         const elements = Array.from(
           modal?.querySelectorAll<HTMLElement>(
@@ -1297,7 +1366,7 @@ function Modal({
       document.removeEventListener("keydown", fn);
       previous?.focus();
     };
-  }, [close]);
+  }, []);
   return (
     <div
       className="modal-backdrop"

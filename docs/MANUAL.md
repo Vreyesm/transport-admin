@@ -16,9 +16,9 @@ Entra por **Acceso administrativo** con tu correo y contraseña. La cuenta debe 
 
 1. En **Flota de vehículos**, pulsa **Agregar vehículo**.
 2. Completa nombre, patente, tipo, capacidad, marca, modelo, año y características. Las observaciones son internas.
-3. Añade fotos JPG, PNG o WebP de hasta 5 MB. **Usar principal** coloca una foto como portada. Las fotos son públicas: utiliza únicamente imágenes autorizadas de los vehículos.
+3. Añade fotos JPG, PNG o WebP de hasta 5 MB. Se previsualizan localmente y se suben al guardar; cerrar sin guardar descarta las fotos nuevas. **Usar principal** coloca una foto como portada. Las fotos son públicas: utiliza únicamente imágenes autorizadas de los vehículos.
 4. Pulsa **Guardar vehículo**. La patente no puede repetirse, incluso con diferencias de espacios o guiones.
-5. Para editar abre **Ver y editar ficha**. **Archivar vehículo** conserva su historial y bloquea nuevas asignaciones. Activa **Incluir archivados** para encontrarlo y reactivarlo.
+5. Para editar abre **Ver y editar ficha**. **Archivar vehículo** conserva su historial y bloquea nuevas asignaciones. Si tiene asignaciones vigentes o futuras, debes cancelarlas o reasignarlas antes de archivarlo. Activa **Incluir archivados** para encontrarlo y reactivarlo.
 
 ### Reservas y mantenimiento
 
@@ -29,7 +29,7 @@ Entra por **Acceso administrativo** con tu correo y contraseña. La cuenta debe 
 5. Guarda. Si existe un cruce, corrige horario o vehículo. Reservas consecutivas están permitidas si una termina exactamente cuando empieza otra.
 6. Pulsa una ocupación para modificarla o **Cancelar asignación**. Las canceladas dejan de bloquear disponibilidad y permanecen en **Historial de asignaciones**.
 
-Los bloqueos por mantenimiento siguen las mismas reglas. Los cambios quedan auditados en la base de datos. No hay borrado permanente desde la aplicación. Archivar un vehículo lo retira de la consulta pública, por lo que conviene cancelar o reasignar sus viajes pendientes previamente.
+Los bloqueos por mantenimiento siguen las mismas reglas. Los cambios quedan auditados en la base de datos. No hay borrado permanente desde la aplicación. Archivar un vehículo lo retira de la consulta pública y exige cancelar o reasignar sus asignaciones pendientes previamente.
 
 ### Configuración
 
@@ -38,3 +38,7 @@ Modifica nombre municipal, color y URL HTTPS del logo. Guarda para aplicarlo a a
 ## Demostración
 
 Sin variables de Supabase aparece un aviso de demostración y una entrada administrativa de prueba. Los datos son ficticios y se guardan únicamente en ese navegador. No usar para operación municipal real: no ofrece autenticación ni concurrencia entre equipos. Al conectar Supabase se desactiva automáticamente el modo de demostración; sus datos no se importan.
+
+Si otro administrador cambió el registro mientras lo editabas, se rechaza el guardado para conservar sus cambios. Cierra y vuelve a abrir la ficha antes de reintentar. En Configuración, vuelve a entrar a la sección.
+
+La cabecera muestra la última actualización exitosa en hora de Chile. Si aparece **Sin actualizar**, la disponibilidad puede estar desactualizada: recupera la conexión antes de planificar.
