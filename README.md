@@ -6,7 +6,7 @@ Aplicación en español para administrar buses y minibuses, reservas y bloqueos 
 
 En Linux, con Bash, Docker Engine + Compose v2 (o Docker Desktop) y Node.js 24/npm:
 
-```powershell
+```bash
 ./scripts/start-local.sh
 ```
 
@@ -27,7 +27,7 @@ ignorado por Git. `.env.local` del entorno remoto se conserva.
 Las cuentas y datos de Vercel/Supabase remoto no se copian. El inicio automático solo carga el administrador de `supabase/seed-admin.json` mediante Auth; no carga buses ni asignaciones.
 Los datos y fotos persisten en volúmenes Docker. Para detener sin borrarlos:
 
-```powershell
+```bash
 ./scripts/stop-local.sh
 ```
 
@@ -38,7 +38,7 @@ No uses `supabase db reset` salvo que quieras borrar y recrear la base local. Tr
 
 Para cargar buses y asignaciones de ejemplo explícitamente:
 
-```powershell
+```bash
 ./scripts/seed-demo.sh
 ```
 
@@ -50,9 +50,9 @@ ya existentes en un volumen: los ejemplos cargados anteriormente permanecen.
 
 Requiere Node.js 24 y npm.
 
-```powershell
+```bash
 npm ci
-Copy-Item .env.example .env.local
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -94,7 +94,7 @@ Los visitantes solo tienen ejecución de `public_transport_data()`: no SELECT di
 
 ## Verificación
 
-```powershell
+```bash
 npm test
 npm run lint
 npm run typecheck
@@ -113,7 +113,7 @@ Los scripts locales y el Compose de este repositorio son para desarrollo: ejecut
 
 Puedes alojar Next.js en cualquier servicio compatible con Node.js y usar Supabase administrado. No requiere workers ni servicios adicionales. La demo usa Vercel Hobby y Supabase Free; consulta su configuración en [docs/DEMO.md](docs/DEMO.md).
 
-```powershell
+```bash
 npm ci
 npm run build
 npm run start
@@ -121,7 +121,7 @@ npm run start
 
 Define las dos variables públicas **antes del build**. Usa HTTPS y un proxy inverso si despliegas en VPS. El Dockerfile ofrece salida standalone:
 
-```powershell
+```bash
 docker build --build-arg NEXT_PUBLIC_SUPABASE_URL=https://TU-PROYECTO.supabase.co --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=TU-CLAVE-PUBLICA -t transport-admin .
 docker run -d --name transport-admin -p 3000:3000 --restart unless-stopped transport-admin
 ```

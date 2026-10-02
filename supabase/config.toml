@@ -70,7 +70,7 @@ enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
 # The local start script provisions only seed-admin.json through Auth.
-# seed-demo.sql is opt-in via scripts/seed-demo.ps1.
+# seed-demo.sql is opt-in via scripts/seed-demo.sh.
 sql_paths = []
 
 [db.network_restrictions]
