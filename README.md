@@ -56,11 +56,29 @@ cp .env.example .env.local
 npm run dev
 ```
 
+`npm run dev` aplica automáticamente las migraciones pendientes antes de arrancar.
+Sin configuración de Supabase conserva el modo demostración. Con Supabase, configura
+también `SUPABASE_DB_URL` y `SUPABASE_DB_PASSWORD` en `.env.local`; son secretos privados
+y nunca deben tener prefijo `NEXT_PUBLIC_`. Para la base local usa
+`SUPABASE_DB_URL=postgresql://postgres@127.0.0.1:54322/postgres` y
+`SUPABASE_DB_PASSWORD=postgres`. Inicia Supabase antes de ejecutar la aplicación.
+Para Supabase remoto usa la conexión directa o el session pooler del mismo proyecto
+(contraseña de PostgreSQL, no una API key). La conexión remota exige TLS.
+El arranque se cancela si falta la conexión, apunta a otro proyecto o falla una migración.
+No se ejecutan seeds, resets ni reparaciones automáticas del historial.
+
+Para aplicar migraciones explícitamente: `npm run db:migrate`.
+En despliegues ejecútalo antes del build con las credenciales privadas disponibles;
+en producción el contenedor standalone solo sirve la aplicación.
+Si aplicaste SQL manualmente, comprueba el esquema y sincroniza una vez el historial
+con `supabase migration list` / `supabase migration repair` antes de usar este flujo.
+Marca como aplicadas únicamente migraciones cuyo contenido ya exista en la base.
+
 Abre http://localhost:3000. Sin variables de Supabase funciona en **modo demostración**, con datos ficticios locales y acceso administrativo de prueba. No sirve como autenticación de producción. Los datos de demostración no se transfieren a Supabase.
 
 ## Conectar Supabase
 
-1. Crea un proyecto Supabase. Ejecuta en SQL Editor, en orden, los archivos de `supabase/migrations/`. También pueden aplicarse con Supabase CLI y su flujo habitual de migraciones. No vuelvas a ejecutarlos en un proyecto ya migrado.
+1. Crea un proyecto Supabase. Configura la conexión privada indicada arriba y ejecuta `npm run db:migrate` (también se ejecuta antes de `npm run dev`). La CLI registra el historial y aplica solo las migraciones pendientes de `supabase/migrations/`, en orden. No vuelvas a ejecutar SQL de migraciones ya aplicadas.
 2. Opcionalmente, solo en desarrollo, ejecuta `supabase/seed-demo.sql` para cargar buses y asignaciones ficticios. Es manual, aditivo e idempotente: no modifica registros existentes y omite ejemplos en conflicto.
 3. Copia la URL y la clave pública **publishable** (o anon/legacy JWT) del proyecto a `.env.local`:
 
@@ -145,7 +163,9 @@ Abre http://localhost:3000. La raíz redirige al calendario de la aplicación.
 Compose carga `.env.docker.local`, generado por el script de inicio local.
 El script conserva `.env.local` para el entorno remoto.
 Se usa Webpack con polling para recargar cambios desde Windows y volúmenes
-separados para dependencias y caché. Al arrancar se actualizan las dependencias con `npm ci`.
+separados para dependencias y caché. Al arrancar se actualizan las dependencias con `npm ci`
+y se aplican las migraciones pendientes a PostgreSQL local a través de la red de Supabase.
+Si la base no está disponible o falla una migración, la aplicación no arranca.
 
 Para detener: `docker compose down`. Para cambiar el puerto en Linux, usa `APP_PORT=3001 ./scripts/start-local.sh`.
 
