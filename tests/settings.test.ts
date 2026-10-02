@@ -2,22 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 test("settings save requires a returned row and rejects an RLS-hidden update", async () => {
-  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://settings.test";
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-key";
   const { saveSettings } = await import("../src/modules/settings/repository");
   const originalFetch = globalThis.fetch;
   let visible = true;
   globalThis.fetch = async (_input, init) => {
     const headers = new Headers(init?.headers);
-    assert.equal(headers.get("accept"), "application/vnd.pgrst.object+json");
+    assert.equal(headers.get("content-type"), "application/json");
     return new Response(
       JSON.stringify(
-        visible
-          ? { id: 1 }
-          : { code: "PGRST116", message: "The result contains 0 rows" },
+        visible ? { id: 1 } : { error: "El registro ya no existe." },
       ),
       {
-        status: visible ? 200 : 406,
+        status: visible ? 200 : 409,
         headers: { "Content-Type": "application/json" },
       },
     );
@@ -31,7 +27,7 @@ test("settings save requires a returned row and rejects an RLS-hidden update", a
     };
     await saveSettings(draft);
     visible = false;
-    await assert.rejects(saveSettings(draft), { code: "PGRST116" });
+    await assert.rejects(saveSettings(draft), /El registro ya no existe/);
   } finally {
     globalThis.fetch = originalFetch;
   }

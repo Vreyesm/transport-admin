@@ -57,8 +57,4 @@ Las canceladas se excluyen por defecto. Solo en administración se puede selecci
 
 ## Demostración
 
-Sin variables de Supabase aparece un aviso de demostración y una entrada administrativa de prueba. Los datos son ficticios y se guardan únicamente en ese navegador. No usar para operación municipal real: no ofrece autenticación ni concurrencia entre equipos. Al conectar Supabase se desactiva automáticamente el modo de demostración; sus datos no se importan.
-
-Si otro administrador cambió el registro mientras lo editabas, se rechaza el guardado para conservar sus cambios. Cierra y vuelve a abrir la ficha antes de reintentar. En Configuración, vuelve a entrar a la sección.
-
-La cabecera muestra la última actualización exitosa en hora de Chile. Si aparece **Sin actualizar**, la disponibilidad puede estar desactualizada: recupera la conexión antes de planificar.
+La instalación usa PostgreSQL en Docker Compose. Se requiere una cuenta administrativa; no existe acceso de prueba sin autenticación. Consulta README.md para configurar la instalación.

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { api, configured } from "@/lib/api";
 import { dayStart } from "@/lib/time";
 import { shiftDay } from "@/lib/calendar";
 import { Button } from "./ui/button";
@@ -31,7 +31,7 @@ export function AuditView() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      if (!supabase) {
+      if (!configured) {
         if (active)
           setResult({ rows: [], count: 0, error: "", loading: false });
         return;
@@ -46,21 +46,18 @@ export function AuditView() {
           throw new Error("Ingresa un UUID de actor completo.");
         if (from && to && from > to)
           throw new Error("El término debe ser posterior al inicio.");
-        let q = supabase
-          .from("audit_log")
-          .select(
-            "id,actor,entity,record_id,operation,created_at,before_data,after_data",
-            { count: "exact" },
-          )
-          .order("created_at", { ascending: false })
-          .order("id", { ascending: false });
-        if (entity) q = q.eq("entity", entity);
-        if (operation) q = q.eq("operation", operation);
-        if (actor) q = q.eq("actor", actor);
-        if (from) q = q.gte("created_at", dayStart(from));
-        if (to) q = q.lt("created_at", dayStart(shiftDay(to, 1)));
-        const { data, error, count } = await q.range(page * 20, page * 20 + 19);
-        if (error) throw error;
+        const params = new URLSearchParams({
+          entity,
+          operation,
+          actor,
+          from: from ? dayStart(from) : "",
+          to: to ? dayStart(shiftDay(to, 1)) : "",
+          page: String(page),
+        });
+        const { rows: data, count } = await api<{
+          rows: Entry[];
+          count: number;
+        }>(`audit?${params}`);
         if (active)
           setResult({
             rows: data || [],
@@ -101,10 +98,11 @@ export function AuditView() {
         Actor identificado por UUID de cuenta. Sin actor: operación del sistema
         o migración. No existe un directorio público de cuentas.
       </p>
-      {!supabase ? (
+      {!configured ? (
         <p>
           Demostración: no se registra auditoría persistente ni se simulan
-          identidades. El historial real estará disponible al conectar Supabase.
+          identidades. El historial real estará disponible al conectar
+          PostgreSQL.
         </p>
       ) : (
         <>

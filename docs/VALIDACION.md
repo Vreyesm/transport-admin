@@ -1,3 +1,5 @@
+> Registro histórico de la instalación anterior. Para la instalación PostgreSQL actual consulta README.md y MIGRACION.md.
+
 # ValidaciÃ³n de la primera versiÃ³n
 
 ## Comprobaciones automatizadas
