@@ -7,27 +7,9 @@ test("migration, overlap constraints, audit, and public permissions", async () =
   const db = new PGlite({ extensions: { btree_gist } });
   try {
     await db.exec(
-      `create role anon;create role authenticated; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; grant usage on schema auth, public to anon,authenticated; grant execute on function auth.uid() to anon,authenticated; create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid,bucket_id text,name text);alter table storage.objects enable row level security;`,
+      await readFile("database/migrations/001_initial.sql", "utf8"),
     );
-    await db.exec(
-      await readFile("supabase/migrations/202610010001_initial.sql", "utf8"),
-    );
-    await db.exec(
-      await readFile("supabase/migrations/202610010002_photos.sql", "utf8"),
-    );
-    await db.exec(
-      await readFile(
-        "supabase/migrations/202610020001_safe_updates.sql",
-        "utf8",
-      ),
-    );
-    await db.exec(await readFile("supabase/seed-demo.sql", "utf8"));
-    await db.exec(
-      await readFile(
-        "supabase/migrations/202610020002_audit_indexes.sql",
-        "utf8",
-      ),
-    );
+    await db.exec(await readFile("database/seed.sql", "utf8"));
     const vehicle = "22222222-2222-4222-8222-222222222222";
     await db.query("update public.vehicles set photos=$1 where id=$2", [
       JSON.stringify(["https://example.test/photo.jpg"]),
@@ -112,7 +94,7 @@ test("migration, overlap constraints, audit, and public permissions", async () =
     const admin = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const outsider = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     await db.exec(
-      `insert into auth.users values('${admin}'),('${outsider}');insert into public.admin_profiles values('${admin}');set role authenticated;select set_config('request.jwt.claim.sub','${outsider}',false);`,
+      `insert into auth.users(id,email,password_hash) values('${admin}','admin@test','unused'),('${outsider}','outsider@test','unused');insert into public.admin_profiles values('${admin}');set role authenticated;select set_config('app.actor','${outsider}',false);`,
     );
     const blocked = await db.query("select * from public.occupations");
     assert.equal(blocked.rows.length, 0);
@@ -124,9 +106,7 @@ test("migration, overlap constraints, audit, and public permissions", async () =
       insert("2027-02-01T12:00Z", "2027-02-01T15:00Z"),
       /row-level security/,
     );
-    await db.exec(
-      `select set_config('request.jwt.claim.sub','${admin}',false)`,
-    );
+    await db.exec(`select set_config('app.actor','${admin}',false)`);
     const allowed = await db.query("select * from public.occupations");
     assert.ok(allowed.rows.length > 0);
     await insert("2027-02-01T12:00Z", "2027-02-01T15:00Z");
@@ -176,24 +156,11 @@ test("migration, overlap constraints, audit, and public permissions", async () =
       ]),
       vehicle,
     ]);
-    await db.exec(
-      "grant usage on schema storage to authenticated; grant select,delete on storage.objects to authenticated; insert into storage.objects(bucket_id,name) values('vehicle-photos','used.jpg'),('vehicle-photos','unused.jpg'); set role authenticated;",
-    );
-    const deleted = await db.query<{ name: string }>(
-      "delete from storage.objects returning name",
-    );
-    assert.deepEqual(
-      deleted.rows.map((x) => x.name),
-      ["unused.jpg"],
+    await assert.rejects(
+      db.exec("set role anon; select * from auth.users"),
+      /permission denied/,
     );
     await db.exec("reset role");
-    const retained = await db.query<{ name: string }>(
-      "select name from storage.objects",
-    );
-    assert.deepEqual(
-      retained.rows.map((x) => x.name),
-      ["used.jpg"],
-    );
   } finally {
     await db.close();
   }

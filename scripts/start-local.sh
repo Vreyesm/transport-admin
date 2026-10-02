@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-umask 077
-
-npx --yes supabase@2.119.0 start -x realtime,edge-runtime,logflare,vector,supavisor,imgproxy --yes >/dev/null
-npx --yes supabase@2.119.0 migration up --local
-npx --yes supabase@2.119.0 status -o json | node scripts/provision-local.mjs
-docker compose up --build -d
-printf 'Aplicación: http://localhost:%s\n' "${APP_PORT:-3000}"
-printf 'PostgreSQL: localhost:54322 (usuario/base/contraseña: postgres)\nStudio: http://localhost:54323\n'
+if [[ ! -f .env ]]; then
+  printf 'Copia .env.example a .env y configura las credenciales antes de iniciar.\n' >&2
+  exit 1
+fi
+docker compose -f compose.yaml -f compose.dev.yaml up --build -d
+printf 'Aplicacion disponible en el puerto PORT de .env (3000 por defecto).\n'

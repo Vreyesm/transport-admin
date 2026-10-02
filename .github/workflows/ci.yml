@@ -16,7 +16,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: bash -n scripts/start-local.sh scripts/stop-local.sh scripts/seed-demo.sh
-      - run: node --check scripts/provision-local.mjs
+      - run: node --check scripts/database.mjs
       - run: npm test
       - run: npm run lint
       - run: npm run build

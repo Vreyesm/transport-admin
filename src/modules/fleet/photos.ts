@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { api } from "@/lib/api";
 export function validatePhoto(file: File) {
   if (
     !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
@@ -8,33 +8,15 @@ export function validatePhoto(file: File) {
 }
 export async function uploadPhoto(file: File) {
   validatePhoto(file);
-  if (!supabase)
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  const path = crypto.randomUUID() + "." + file.type.split("/")[1];
-  const { error } = await supabase.storage
-    .from("vehicle-photos")
-    .upload(path, file);
-  if (error) throw error;
-  return supabase.storage.from("vehicle-photos").getPublicUrl(path).data
-    .publicUrl;
+  const response = await fetch("/api/photos", {
+    method: "POST",
+    headers: { "Content-Type": file.type },
+    body: file,
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error);
+  return result.url as string;
 }
-
 export async function removePhotos(urls: string[]) {
-  if (!supabase || !urls.length) return;
-  const prefix = supabase.storage.from("vehicle-photos").getPublicUrl("")
-    .data.publicUrl;
-  const paths = urls
-    .filter((url) => url.startsWith(prefix))
-    .map((url) => url.slice(prefix.length));
-  if (!paths.length) return;
-  const { error } = await supabase.storage.from("vehicle-photos").remove(paths);
-  if (error)
-    throw new Error(
-      "Los cambios se guardaron, pero no se pudieron limpiar las fotos descartadas. Reintenta la limpieza desde Storage.",
-    );
+  if (urls.length) await api("photos", { urls }, "DELETE");
 }

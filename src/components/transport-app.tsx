@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Data, Occupation, Vehicle } from "@/lib/types";
-import { configured, supabase } from "@/lib/supabase";
+import { api, configured, signOut, signInWithPassword } from "@/lib/api";
 import {
   loadData,
   saveOccupation,
@@ -134,76 +134,34 @@ export default function TransportApp({
   useEffect(() => {
     const scope = requests.current;
     const authChecks = checks.current;
-    if (!supabase) {
-      const timer = setTimeout(() => {
-        access.current =
-          sessionStorage.getItem("transport-demo-admin") === "true";
-        if (access.current) {
-          scope.invalidate();
-          setReady(false);
-          setSessionEpoch((epoch) => epoch + 1);
-        }
-        setAuthorized(access.current);
-      }, 0);
-      return () => clearTimeout(timer);
-    }
     let active = true;
-    let authEvents = 0;
-    let currentId: string | undefined;
-    let initialized = false;
-    const verify = async (
-      id: string | undefined,
-      ticket: ReturnType<RequestScope["begin"]>,
-    ) => {
-      if (!active || !ticket.current()) return;
-      if (!id) return;
-      const { data, error } = await supabase!
-        .from("admin_profiles")
-        .select("id")
-        .eq("id", id)
-        .maybeSingle();
-      if (active && ticket.current()) {
-        access.current = Boolean(data && !error);
-        if (access.current) {
-          scope.invalidate();
-          setReady(false);
-          setData(empty);
-          setSessionEpoch((epoch) => epoch + 1);
+    const verify = async () => {
+      const ticket = authChecks.begin();
+      try {
+        const session = await api<{ user: { id: string } | null }>("session");
+        if (!active || !ticket.current()) return;
+        const allowed = Boolean(session.user);
+        if (allowed !== access.current) {
+          resetAccess();
+          access.current = allowed;
+          setAuthorized(allowed);
         }
-        setAuthorized(Boolean(data && !error));
-        if (!data)
-          setError(
-            "Esta cuenta no tiene acceso administrativo. Solicita su habilitación.",
-          );
+      } catch {
+        if (active && ticket.current()) resetAccess();
       }
     };
-    const applySession = (id?: string) => {
-      if (
-        !active ||
-        (initialized && id === currentId && (!id || access.current))
-      )
-        return;
-      initialized = true;
-      currentId = id;
-      resetAccess();
-      const ticket = checks.current.begin();
-      setTimeout(() => void verify(id, ticket), 0);
-    };
-    supabase.auth.getSession().then(({ data }) => {
-      if (!authEvents) applySession(data.session?.user.id);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        authEvents++;
-        applySession(session?.user.id);
-      },
-    );
+    void verify();
+    window.addEventListener("transport-session", verify);
+    window.addEventListener("focus", verify);
+    const interval = setInterval(verify, 60000);
     return () => {
       active = false;
       scope.invalidate();
       authChecks.invalidate();
       clearPhotos();
-      listener.subscription.unsubscribe();
+      clearInterval(interval);
+      window.removeEventListener("transport-session", verify);
+      window.removeEventListener("focus", verify);
     };
   }, [resetAccess, clearPhotos]);
   useEffect(() => {
@@ -421,8 +379,8 @@ export default function TransportApp({
                 title="Cerrar sesión"
                 onClick={async () => {
                   resetAccess();
-                  if (supabase) {
-                    const { error } = await supabase.auth.signOut();
+                  if (configured) {
+                    const { error } = await signOut();
                     if (error)
                       setError(
                         "No se pudo cerrar la sesión remota. Reintenta cerrar sesión desde este dispositivo.",
@@ -488,7 +446,7 @@ export default function TransportApp({
           {!configured && (
             <div className="demo-banner">
               Modo demostración · Datos ficticios guardados en este navegador.
-              Conecta Supabase para uso real.
+              Configura PostgreSQL para uso real.
             </div>
           )}
           {error && (
@@ -517,7 +475,7 @@ export default function TransportApp({
                   variant="outline"
                   onClick={async () => {
                     resetAccess();
-                    const result = await supabase!.auth.signOut();
+                    const result = await signOut();
                     if (result.error)
                       setError(
                         "No se pudo cerrar la sesión remota. Reintenta cuando recuperes la conexión.",
@@ -533,7 +491,7 @@ export default function TransportApp({
                     e.preventDefault();
                     setBusy(true);
                     const f = new FormData(e.currentTarget);
-                    const result = await supabase!.auth.signInWithPassword({
+                    const result = await signInWithPassword({
                       email: String(f.get("email")),
                       password: String(f.get("password")),
                     });

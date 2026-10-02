@@ -1,3 +1,5 @@
+> Registro histórico de la instalación anterior. Para la instalación PostgreSQL actual consulta README.md y MIGRACION.md.
+
 # Demo inicial
 
 Repositorio: https://github.com/Vreyesm/transport-admin
@@ -17,4 +19,4 @@ La función pública devuelve dos vehículos y una ocupación sin actividad ni c
 
 La primera implementación (`de7cbb2`) se promovió al dominio público desde la rama del PR. El titular creó su cuenta Auth y se habilitó su perfil administrativo. Registro público desactivado y Site URL configurada con el dominio HTTPS de la demo.
 
-Seed adicional: supabase/seed-usage.sql cargado en la demo. Flota de cuatro vehículos; 27 ejemplos nuevos (24 reservas, tres mantenimientos, una de las reservas cancelada). La consulta pública muestra 27 ocupaciones activas incluyendo la reserva inicial y conserva denegado el acceso anónimo a tablas internas.
+Seed adicional: database/seed-usage.sql cargado en la demo. Flota de cuatro vehículos; 27 ejemplos nuevos (24 reservas, tres mantenimientos, una de las reservas cancelada). La consulta pública muestra 27 ocupaciones activas incluyendo la reserva inicial y conserva denegado el acceso anónimo a tablas internas.

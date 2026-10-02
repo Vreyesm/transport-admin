@@ -1,3 +1,11 @@
+create role anon nologin;
+create role authenticated nologin;
+create schema auth;
+create table auth.users(id uuid primary key default gen_random_uuid(),email text unique not null,password_hash text not null,enabled boolean not null default true);
+create table auth.sessions(token_hash text primary key,user_id uuid not null references auth.users(id) on delete cascade,expires_at timestamptz not null);
+create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('app.actor',true),'')::uuid $$;
+grant usage on schema auth,public to anon,authenticated;
+grant execute on function auth.uid() to anon,authenticated;
 create extension if not exists btree_gist;
 create table public.admin_profiles (id uuid primary key references auth.users(id) on delete cascade);
 create function public.is_admin() returns boolean language sql stable security definer set search_path = '' as $$ select exists(select 1 from public.admin_profiles where id=auth.uid()) $$;
@@ -43,7 +51,60 @@ create function public.public_transport_data() returns jsonb language sql stable
 $$;
 revoke execute on function public.public_transport_data() from public;
 grant execute on function public.public_transport_data() to anon,authenticated;
-insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values('vehicle-photos','vehicle-photos',true,5242880,array['image/jpeg','image/png','image/webp']);
-create policy admin_photo_insert on storage.objects for insert to authenticated with check(bucket_id='vehicle-photos' and public.is_admin());
-create policy admin_photo_select on storage.objects for select to authenticated using(bucket_id='vehicle-photos' and public.is_admin());
-create policy admin_photo_delete on storage.objects for delete to authenticated using(bucket_id='vehicle-photos' and public.is_admin());
+-- Metadata de fotos normalizada; el array de vehicles es la interfaz de escritura.
+-- El trigger mantiene orden y portada dentro de la misma transacción.
+create table public.vehicle_photos (
+ vehicle_id uuid not null references public.vehicles(id),position int not null check(position>=0),url text not null,primary key(vehicle_id,position)
+);
+alter table public.vehicle_photos enable row level security;
+revoke all on public.vehicle_photos from anon,authenticated;
+grant select on public.vehicle_photos to authenticated;
+create policy admin_photo_metadata_read on public.vehicle_photos for select to authenticated using(public.is_admin());
+create function public.sync_vehicle_photos() returns trigger language plpgsql security definer set search_path='' as $$ begin
+ delete from public.vehicle_photos where vehicle_id=NEW.id;
+ insert into public.vehicle_photos(vehicle_id,position,url) select NEW.id,(ordinality-1)::int,value from jsonb_array_elements_text(NEW.photos) with ordinality;
+ return NEW; end $$;
+create trigger sync_photos after insert or update of photos on public.vehicles for each row execute function public.sync_vehicle_photos();
+insert into public.vehicle_photos(vehicle_id,position,url) select v.id,(p.ordinality-1)::int,p.value from public.vehicles v cross join lateral jsonb_array_elements_text(v.photos) with ordinality as p;
+-- Reject stale editor snapshots inside the transaction that writes the row.
+alter table public.vehicles add column version integer not null default 1 check(version > 0);
+alter table public.occupations add column version integer not null default 1 check(version > 0);
+alter table public.settings add column version integer not null default 1 check(version > 0);
+
+create function public.check_record_version() returns trigger
+language plpgsql set search_path='' as $$
+begin
+  if NEW.version <> OLD.version then
+    raise exception using errcode='PT409', message='Otro administrador modificó este registro. Cierra la ficha y vuelve a abrirla antes de guardar.';
+  end if;
+  NEW.version := OLD.version + 1;
+  return NEW;
+end $$;
+create trigger version_vehicles before update on public.vehicles for each row execute function public.check_record_version();
+create trigger version_occupations before update on public.occupations for each row execute function public.check_record_version();
+create trigger version_settings before update on public.settings for each row execute function public.check_record_version();
+
+-- An occupation locks its vehicle FOR SHARE. Updating archived takes the
+-- conflicting row lock, so reservations and archival cannot race past this guard.
+create function public.check_vehicle_archive() returns trigger
+language plpgsql set search_path='' as $$
+begin
+  if NEW.archived and not OLD.archived and exists (
+    select 1 from public.occupations
+    where vehicle_id=NEW.id and not cancelled and ends_at > now()
+  ) then
+    raise exception 'Cancela o reasigna las asignaciones pendientes antes de archivar el vehículo.';
+  end if;
+  return NEW;
+end $$;
+create trigger archive_vehicle before update of archived on public.vehicles
+for each row execute function public.check_vehicle_archive();
+
+-- RLS and read-only authenticated grants are established by the initial migration.
+-- Support deterministic pagination and common administrative audit filters.
+create index audit_log_created_id on public.audit_log(created_at desc, id desc);
+create index audit_log_entity_created on public.audit_log(entity, created_at desc);
+create index audit_log_actor_created on public.audit_log(actor, created_at desc);
+
+create table public.photo_files(id uuid primary key default gen_random_uuid(),mime text not null,data bytea not null check(octet_length(data)<=5242880));
+create table auth.login_attempts(key text primary key,attempts integer not null,window_start timestamptz not null default now());
