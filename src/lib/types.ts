@@ -35,6 +35,7 @@ export type Settings = {
   version?: number;
 };
 export type Data = {
+  requiresMigration?: boolean;
   vehicles: Vehicle[];
   occupations: Occupation[];
   settings: Settings;

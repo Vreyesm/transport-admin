@@ -49,6 +49,8 @@ import { useUnsaved } from "./use-unsaved";
 import { AccessRevokedError } from "@/lib/access";
 
 type Section = "calendar" | "fleet" | "settings" | "audit";
+const migrationMessage =
+  "El calendario está disponible en modo consulta. Para habilitar la edición, el responsable técnico debe aplicar supabase/migrations/202610020001_safe_updates.sql y recargar la página.";
 const empty: Data = {
   vehicles: [],
   occupations: [],
@@ -76,7 +78,8 @@ export default function TransportApp({
     [occupation, setOccupation] = useState<Occupation | null>(null),
     [busy, setBusy] = useState(false),
     [allDay, setAllDay] = useState(false);
-  const canEdit = admin && authorized;
+  const canAdmin = admin && authorized;
+  const canEdit = canAdmin && ready && !data.requiresMigration;
   const unsaved = useUnsaved(canEdit);
   const router = useRouter();
   const clearUnsaved = unsaved.clear;
@@ -112,12 +115,12 @@ export default function TransportApp({
   const refresh = useCallback(async () => {
     const ticket = requests.current.begin();
     try {
-      const loaded = await loadData(canEdit && access.current);
+      const loaded = await loadData(canAdmin && access.current);
       if (!ticket.current()) return;
       setData(loaded);
       setLastUpdated(new Date().toISOString());
       setStale(false);
-      setError("");
+      setError(loaded.requiresMigration ? migrationMessage : "");
     } catch (e) {
       if (!ticket.current()) return;
       if (e instanceof AccessRevokedError) {
@@ -130,7 +133,7 @@ export default function TransportApp({
     } finally {
       if (ticket.current()) setReady(true);
     }
-  }, [canEdit, resetAccess]);
+  }, [canAdmin, resetAccess]);
   useEffect(() => {
     const scope = requests.current;
     const authChecks = checks.current;
@@ -255,6 +258,14 @@ export default function TransportApp({
           : "Libre";
   }
   async function mutate(action: () => Promise<void | string>) {
+    if (!canEdit) {
+      setError(
+        data.requiresMigration
+          ? migrationMessage
+          : "La edición no está disponible.",
+      );
+      return;
+    }
     const ticket = requests.current.begin();
     setBusy(true);
     setError("");

@@ -43,13 +43,21 @@ export async function loadData(admin: boolean): Promise<Data> {
   const results = await Promise.all([
     supabase.from("vehicles").select("*"),
     supabase.from("occupations").select("*"),
-    supabase.from("settings").select("name,color,logo,version").single(),
+    // Selecting existing columns also permits read-only access before migration.
+    supabase.from("settings").select("*").single(),
   ]);
   for (const r of results) if (r.error) throw r.error;
+  const vehicles = results[0].data as Vehicle[];
+  const occupations = results[1].data as Occupation[];
+  const settings = results[2].data as Settings;
   return {
-    vehicles: results[0].data as Vehicle[],
-    occupations: results[1].data as Occupation[],
-    settings: results[2].data as Settings,
+    requiresMigration:
+      typeof settings.version !== "number" ||
+      vehicles.some((v) => typeof v.version !== "number") ||
+      occupations.some((o) => typeof o.version !== "number"),
+    vehicles,
+    occupations,
+    settings,
   };
 }
 import { demo } from "./demo-store";

@@ -153,4 +153,4 @@ La imagen de producción admite las variables públicas como build args según
 la sección de despliegue. El target por defecto es `production`.
 ## Actualizar una instalación existente
 
-Antes de desplegar estos fixes, aplica `supabase/migrations/202610020001_safe_updates.sql` después de las dos migraciones iniciales. Agrega versiones a vehículos, asignaciones y configuración, protege el archivado con compromisos pendientes y evita eliminar fotos en uso. El nuevo cliente requiere esta migración; no despliegues el cliente sobre el esquema anterior.
+Aplica `supabase/migrations/202610020001_safe_updates.sql` después de las dos migraciones iniciales. Agrega versiones a vehículos, asignaciones y configuración, protege el archivado con compromisos pendientes y evita eliminar fotos en uso. Si falta esta migración, el calendario administrativo carga los datos en modo consulta y muestra un aviso; la edición queda deshabilitada. Aplica la migración pendiente y recarga la página para habilitarla. No vuelvas a ejecutar migraciones ya aplicadas.
