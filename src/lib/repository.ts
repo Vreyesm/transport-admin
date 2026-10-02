@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { Data, Settings, Vehicle, Occupation } from "./types";
+import { AccessRevokedError } from "./access";
 export async function loadData(admin: boolean): Promise<Data> {
   if (!supabase) {
     const data = demo();
@@ -30,10 +31,19 @@ export async function loadData(admin: boolean): Promise<Data> {
     if (error) throw error;
     return data;
   }
+  const session = await supabase.auth.getUser();
+  if (!session.data.user) throw new AccessRevokedError();
+  const profile = await supabase
+    .from("admin_profiles")
+    .select("id")
+    .eq("id", session.data.user.id)
+    .maybeSingle();
+  if (profile.error) throw profile.error;
+  if (!profile.data) throw new AccessRevokedError();
   const results = await Promise.all([
     supabase.from("vehicles").select("*"),
     supabase.from("occupations").select("*"),
-    supabase.from("settings").select("name,color,logo").single(),
+    supabase.from("settings").select("name,color,logo,version").single(),
   ]);
   for (const r of results) if (r.error) throw r.error;
   return {

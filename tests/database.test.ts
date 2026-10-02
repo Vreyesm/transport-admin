@@ -7,7 +7,7 @@ test("migration, overlap constraints, audit, and public permissions", async () =
   const db = new PGlite({ extensions: { btree_gist } });
   try {
     await db.exec(
-      `create role anon;create role authenticated; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; grant usage on schema auth, public to anon,authenticated; grant execute on function auth.uid() to anon,authenticated; create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid,bucket_id text);alter table storage.objects enable row level security;`,
+      `create role anon;create role authenticated; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; grant usage on schema auth, public to anon,authenticated; grant execute on function auth.uid() to anon,authenticated; create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid,bucket_id text,name text);alter table storage.objects enable row level security;`,
     );
     await db.exec(
       await readFile("supabase/migrations/202610010001_initial.sql", "utf8"),
@@ -15,7 +15,19 @@ test("migration, overlap constraints, audit, and public permissions", async () =
     await db.exec(
       await readFile("supabase/migrations/202610010002_photos.sql", "utf8"),
     );
+    await db.exec(
+      await readFile(
+        "supabase/migrations/202610020001_safe_updates.sql",
+        "utf8",
+      ),
+    );
     await db.exec(await readFile("supabase/seed-demo.sql", "utf8"));
+    await db.exec(
+      await readFile(
+        "supabase/migrations/202610020002_audit_indexes.sql",
+        "utf8",
+      ),
+    );
     const vehicle = "22222222-2222-4222-8222-222222222222";
     await db.query("update public.vehicles set photos=$1 where id=$2", [
       JSON.stringify(["https://example.test/photo.jpg"]),
@@ -53,6 +65,16 @@ test("migration, overlap constraints, audit, and public permissions", async () =
       ),
       /unique constraint/,
     );
+    await assert.rejects(
+      db.query("update public.vehicles set archived=true where id=$1", [
+        vehicle,
+      ]),
+      /asignaciones pendientes/,
+    );
+    await db.query(
+      "update public.occupations set cancelled=true where vehicle_id=$1",
+      [vehicle],
+    );
     await db.query("update public.vehicles set archived=true where id=$1", [
       vehicle,
     ]);
@@ -72,6 +94,11 @@ test("migration, overlap constraints, audit, and public permissions", async () =
     const serialized = JSON.stringify(pub.rows);
     assert.ok(!serialized.includes("PRIVATE"));
     assert.ok(!serialized.includes("organization"));
+    assert.ok(!serialized.includes("audit_log"));
+    await assert.rejects(
+      db.exec("select * from public.audit_log"),
+      /permission denied/,
+    );
     assert.ok(!serialized.includes('cancelled":true'));
     await assert.rejects(
       db.exec("select * from public.occupations"),
@@ -89,6 +116,10 @@ test("migration, overlap constraints, audit, and public permissions", async () =
     );
     const blocked = await db.query("select * from public.occupations");
     assert.equal(blocked.rows.length, 0);
+    assert.equal(
+      (await db.query("select * from public.audit_log")).rows.length,
+      0,
+    );
     await assert.rejects(
       insert("2027-02-01T12:00Z", "2027-02-01T15:00Z"),
       /row-level security/,
@@ -99,6 +130,70 @@ test("migration, overlap constraints, audit, and public permissions", async () =
     const allowed = await db.query("select * from public.occupations");
     assert.ok(allowed.rows.length > 0);
     await insert("2027-02-01T12:00Z", "2027-02-01T15:00Z");
+    const attributed = await db.query<{
+      actor: string;
+      before_data: unknown;
+      after_data: { contact: string };
+    }>(
+      "select actor,before_data,after_data from public.audit_log where actor=$1 and operation='INSERT' order by id desc limit 1",
+      [admin],
+    );
+    assert.equal(attributed.rows[0].actor, admin);
+    assert.equal(attributed.rows[0].before_data, null);
+    assert.equal(attributed.rows[0].after_data.contact, "PRIVATE-CONTACT");
+    await assert.rejects(
+      db.exec(
+        "insert into public.audit_log(entity,record_id,operation) values('vehicles','fake','INSERT')",
+      ),
+      /permission denied/,
+    );
+    const snapshot = await db.query<{ id: string; version: number }>(
+      "select id,version from public.occupations where vehicle_id=$1 and not cancelled limit 1",
+      [vehicle],
+    );
+    const old = snapshot.rows[0];
+    await db.query(
+      "update public.occupations set cancelled=true,version=$1 where id=$2",
+      [old.version, old.id],
+    );
+    await assert.rejects(
+      db.query(
+        "update public.occupations set cancelled=false,version=$1 where id=$2",
+        [old.version, old.id],
+      ),
+      /Otro administrador/,
+    );
+    const after = await db.query<{ cancelled: boolean; version: number }>(
+      "select cancelled,version from public.occupations where id=$1",
+      [old.id],
+    );
+    assert.equal(after.rows[0].cancelled, true);
+    assert.equal(after.rows[0].version, old.version + 1);
+    await db.exec("reset role");
+    await db.query("update public.vehicles set photos=$1 where id=$2", [
+      JSON.stringify([
+        "https://project.test/storage/v1/object/public/vehicle-photos/used.jpg",
+      ]),
+      vehicle,
+    ]);
+    await db.exec(
+      "grant usage on schema storage to authenticated; grant select,delete on storage.objects to authenticated; insert into storage.objects(bucket_id,name) values('vehicle-photos','used.jpg'),('vehicle-photos','unused.jpg'); set role authenticated;",
+    );
+    const deleted = await db.query<{ name: string }>(
+      "delete from storage.objects returning name",
+    );
+    assert.deepEqual(
+      deleted.rows.map((x) => x.name),
+      ["unused.jpg"],
+    );
+    await db.exec("reset role");
+    const retained = await db.query<{ name: string }>(
+      "select name from storage.objects",
+    );
+    assert.deepEqual(
+      retained.rows.map((x) => x.name),
+      ["used.jpg"],
+    );
   } finally {
     await db.close();
   }

@@ -4,10 +4,10 @@ Aplicación en español para administrar buses y minibuses, reservas y bloqueos 
 
 ## PostgreSQL y Supabase en Docker (entorno local completo)
 
-Con Docker Desktop y Node.js/npm disponibles para ejecutar la CLI:
+En Linux, con Bash, Docker Engine + Compose v2 (o Docker Desktop) y Node.js 24/npm:
 
 ```powershell
-./scripts/start-local.ps1
+./scripts/start-local.sh
 ```
 
 El script inicia PostgreSQL 17, API, Auth, Storage y Studio usando la CLI
@@ -28,18 +28,18 @@ Las cuentas y datos de Vercel/Supabase remoto no se copian. El inicio automátic
 Los datos y fotos persisten en volúmenes Docker. Para detener sin borrarlos:
 
 ```powershell
-./scripts/stop-local.ps1
+./scripts/stop-local.sh
 ```
 
 Repite el script de inicio para volver a levantarlo. Para aplicar nuevas
 migraciones sin borrar datos: `npx --yes supabase@2.119.0 migration up --local`.
-No uses `supabase db reset` salvo que quieras borrar y recrear la base local. Tras un reset, ejecuta `./scripts/start-local.ps1` para volver a crear el administrador.
+No uses `supabase db reset` salvo que quieras borrar y recrear la base local. Tras un reset, ejecuta `./scripts/start-local.sh` para volver a crear el administrador.
 
 
 Para cargar buses y asignaciones de ejemplo explícitamente:
 
 ```powershell
-./scripts/seed-demo.ps1
+./scripts/seed-demo.sh
 ```
 
 Este comando aplica `supabase/seed-demo.sql` únicamente a PostgreSQL local.
@@ -88,9 +88,9 @@ insert into public.admin_profiles(id) values ('UUID-DEL-USUARIO');
 - `src/components`: interfaz compartida y componentes UI extensibles mediante `components.json`.
 - `supabase/migrations`: esquema, RLS, consulta pública de campos permitidos, auditoría y metadatos de fotos.
 
-Las reservas y mantenimiento comparten `occupations`, con intervalos `[inicio, término)`. PostgreSQL impide cruces con `EXCLUDE USING gist`; no depende de una comprobación en el navegador. La cancelación conserva registros y libera disponibilidad. La auditoría registra actor, fecha y valores anteriores/nuevos; puede consultarse por SQL con permisos administrativos.
+Las reservas y mantenimiento comparten `occupations`, con intervalos `[inicio, término)`. PostgreSQL impide cruces con `EXCLUDE USING gist`; no depende de una comprobación en el navegador. La cancelación conserva registros y libera disponibilidad. Las versiones de registros impiden sobrescribir cambios de otro administrador: ante un conflicto, vuelve a abrir la ficha con los datos actuales. No se permite archivar vehículos con asignaciones vigentes o futuras; primero cancélalas o reasígnalas. La auditoría registra actor, fecha y valores anteriores/nuevos; puede consultarse por SQL con permisos administrativos.
 
-Los visitantes solo tienen ejecución de `public_transport_data()`: no SELECT directo a tablas internas. Las cuentas autenticadas requieren `admin_profiles` para operar. El cliente oculta controles, pero la protección efectiva está en RLS. El bucket de fotos es público y solo los administradores pueden subir archivos; todo lo subido debe ser apto para publicación. Quitar una foto de una ficha elimina su asociación, pero no borra el objeto del bucket; el responsable puede limpiar objetos huérfanos desde Supabase Storage.
+Los visitantes solo tienen ejecución de `public_transport_data()`: no SELECT directo a tablas internas. Las cuentas autenticadas requieren `admin_profiles` para operar. El cliente oculta controles, pero la protección efectiva está en RLS. El bucket de fotos es público y solo los administradores pueden subir archivos; todo lo subido debe ser apto para publicación. Las fotos nuevas se previsualizan localmente y se suben al guardar. Al guardar se eliminan del bucket las fotos retiradas de la ficha; la política de Storage conserva cualquier foto que siga asociada a un vehículo. Si falla la conexión durante la limpieza, se informa al administrador para reintentar desde Storage.
 
 ## Verificación
 
@@ -126,7 +126,7 @@ docker build --build-arg NEXT_PUBLIC_SUPABASE_URL=https://TU-PROYECTO.supabase.c
 docker run -d --name transport-admin -p 3000:3000 --restart unless-stopped transport-admin
 ```
 
-Configura respaldos y retención según las capacidades del plan Supabase elegido. Revisa cuotas de almacenamiento, tráfico y base de datos antes de producción; no se asume gratuidad ni disponibilidad garantizada. La aplicación consulta datos cada 60 segundos mientras está visible, al recuperar foco y al cambiar fecha/vista.
+Configura respaldos y retención según las capacidades del plan Supabase elegido. Revisa cuotas de almacenamiento, tráfico y base de datos antes de producción; no se asume gratuidad ni disponibilidad garantizada. La aplicación consulta datos cada 60 segundos mientras está visible, y al recuperar el foco. La cabecera muestra la hora de la última consulta exitosa y avisa cuando la actualización falla.
 
 ## Manual
 
@@ -134,7 +134,7 @@ Consulta [el manual en español](docs/MANUAL.md). Conductores, documentos, solic
 
 ## Comandos de la aplicación en Docker
 
-Después de iniciar el entorno completo con `./scripts/start-local.ps1`, puedes administrar solo la aplicación:
+Después de iniciar el entorno completo con `./scripts/start-local.sh`, puedes administrar solo la aplicación:
 
 ```bash
 docker compose up --build -d
@@ -147,8 +147,10 @@ El script conserva `.env.local` para el entorno remoto.
 Se usa Webpack con polling para recargar cambios desde Windows y volúmenes
 separados para dependencias y caché. Al arrancar se actualizan las dependencias con `npm ci`.
 
-Para detener: `docker compose down`. Para cambiar el puerto en PowerShell,
-define `$env:APP_PORT = "3001"` antes de levantar Compose.
+Para detener: `docker compose down`. Para cambiar el puerto en Linux, usa `APP_PORT=3001 ./scripts/start-local.sh`.
 
 La imagen de producción admite las variables públicas como build args según
 la sección de despliegue. El target por defecto es `production`.
+## Actualizar una instalación existente
+
+Antes de desplegar estos fixes, aplica `supabase/migrations/202610020001_safe_updates.sql` después de las dos migraciones iniciales. Agrega versiones a vehículos, asignaciones y configuración, protege el archivado con compromisos pendientes y evita eliminar fotos en uso. El nuevo cliente requiere esta migración; no despliegues el cliente sobre el esquema anterior.

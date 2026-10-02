@@ -216,6 +216,10 @@ nav a.active {
   border-radius: 50%;
   background: #3caa82;
 }
+
+.live-dot.stale {
+  background: #d97706;
+}
 main {
   padding: 35px 38px;
 }
@@ -948,5 +952,94 @@ fieldset {
   }
   .page-footer span {
     display: none;
+  }
+}
+
+.export-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.schedule-export,
+.audit {
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.schedule-export p,
+.audit p {
+  margin: 12px 0;
+}
+.report-scroll {
+  overflow: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th,
+td {
+  padding: 10px;
+  text-align: left;
+  border: 1px solid #ddd;
+  white-space: pre-wrap;
+}
+.audit details {
+  padding: 12px;
+  border-bottom: 1px solid #ddd;
+}
+.audit-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.audit pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .audit-values {
+    grid-template-columns: 1fr;
+  }
+}
+@media print {
+  body:has(.print-report) .sidebar,
+  body:has(.print-report) .topbar,
+  body:has(.print-report) main > :not(.schedule-export),
+  .schedule-export > :not(.print-report) {
+    display: none !important;
+  }
+  @page {
+    size: landscape;
+    margin: 12mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-report,
+  .print-report * {
+    visibility: visible;
+  }
+  .print-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white;
+    color: black;
+  }
+  .print-button {
+    display: none !important;
+  }
+  .report-scroll {
+    overflow: visible;
+  }
+  td,
+  th {
+    font-size: 10pt;
+  }
+  tr {
+    break-inside: avoid;
   }
 }
