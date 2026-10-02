@@ -11,8 +11,8 @@ En Linux, con Bash, Docker Engine + Compose v2 (o Docker Desktop) y Node.js 24/n
 ```
 
 El script inicia PostgreSQL 17, API, Auth, Storage y Studio usando la CLI
-Supabase fijada a 2.119.0, aplica las migraciones, crea únicamente un
-administrador local y levanta la aplicación con Docker Compose.
+Supabase fijada a 2.119.0, aplica las migraciones y levanta la aplicación
+con Docker Compose. Los seeds no se cargan automáticamente.
 No necesita cuenta de Supabase ni modifica la base remota.
 El primer inicio descarga las imágenes y requiere internet.
 
@@ -20,11 +20,14 @@ El primer inicio descarga las imágenes y requiere internet.
 - Studio (administración de la base local): http://localhost:54323
 - API local: http://127.0.0.1:54321
 - PostgreSQL: `localhost:54322`, base `postgres`, usuario `postgres`, contraseña `postgres`
-- Administrador de prueba local: `admin@transport-admin.cl` / `demotransporte`
+- Administrador de prueba local, solo con `--seed-admin`: `admin@transport-admin.cl` / `demotransporte`
 
 `.env.docker.local` contiene solamente URL y clave pública locales y está
 ignorado por Git. `.env.local` del entorno remoto se conserva.
-Las cuentas y datos de Vercel/Supabase remoto no se copian. El inicio automático solo carga el administrador de `supabase/seed-admin.json` mediante Auth; no carga buses ni asignaciones.
+Las cuentas y datos de Vercel/Supabase remoto no se copian. Para crear opcionalmente
+el administrador de `supabase/seed-admin.json` mediante Auth, ejecuta
+`./scripts/start-local.sh --seed-admin`. Sin esa opción se conservan las cuentas existentes
+y no se crea ninguna. Puedes crear y habilitar tus propias cuentas desde Studio.
 Los datos y fotos persisten en volúmenes Docker. Para detener sin borrarlos:
 
 ```bash
@@ -33,7 +36,8 @@ Los datos y fotos persisten en volúmenes Docker. Para detener sin borrarlos:
 
 Repite el script de inicio para volver a levantarlo. Para aplicar nuevas
 migraciones sin borrar datos: `npx --yes supabase@2.119.0 migration up --local`.
-No uses `supabase db reset` salvo que quieras borrar y recrear la base local. Tras un reset, ejecuta `./scripts/start-local.sh` para volver a crear el administrador.
+No uses `supabase db reset` salvo que quieras borrar y recrear la base local. Tras un reset,
+ejecuta `./scripts/start-local.sh --seed-admin` si quieres volver a crear el administrador de prueba.
 
 
 Para cargar buses y asignaciones de ejemplo explícitamente:
