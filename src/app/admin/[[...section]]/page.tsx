@@ -13,7 +13,9 @@ export default async function Page({
           ? "fleet"
           : section?.[0] === "configuracion"
             ? "settings"
-            : "calendar"
+            : section?.[0] === "auditoria"
+              ? "audit"
+              : "calendar"
       }
     />
   );

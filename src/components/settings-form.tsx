@@ -7,15 +7,19 @@ export function SettingsForm({
   initial,
   busy,
   save,
+  changed,
 }: {
   initial: Settings;
   busy: boolean;
+  changed: () => void;
   save: (settings: Settings) => void;
 }) {
   // Keep the version paired with the actual values shown in this editor.
   const [snapshot] = useState(initial);
   return (
     <form
+      onInput={changed}
+      onChange={changed}
       onSubmit={(e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);

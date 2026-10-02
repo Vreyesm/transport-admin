@@ -35,6 +35,26 @@ Los bloqueos por mantenimiento siguen las mismas reglas. Los cambios quedan audi
 
 Modifica nombre municipal, color y URL HTTPS del logo. Guarda para aplicarlo a ambas vistas.
 
+### Auditoría
+
+Abre **Auditoría** (`/admin/auditoria`). Solo una cuenta administrativa puede consultar este historial: la base aplica RLS y no permite escribir ni borrar entradas desde el cliente. Cada registro indica fecha en Chile, entidad, operación, UUID completo del actor y registro afectado. Despliega la entrada para comparar valores anteriores y nuevos. Un actor vacío identifica una operación del sistema o una migración; no se atribuye a una persona. El UUID identifica la cuenta sin revelar correos ni consultar un directorio público.
+
+Filtra por entidad, operación, UUID completo del actor y fechas civiles de Chile (ambos días incluidos). Se muestran 20 entradas por página, ordenadas por fecha e identificador descendentes. **Actualizar** recarga el resultado. En demostración se muestra una explicación: no se registra auditoría persistente ni se inventan identidades.
+
+### Confirmaciones y borradores
+
+Cancelar una asignación requiere confirmación explícita. Rechazar la acción conserva la asignación y el formulario. Las fichas de vehículos, asignaciones y configuración avisan después de editar un campo, alternar días completos o añadir, quitar o reordenar fotografías locales. El aviso aparece al cerrar por botón, Escape o fondo y al navegar por los enlaces. **Seguir editando**, Escape o cerrar el aviso conserva los valores y fotos; **Confirmar y descartar** permite salir. Guardar correctamente elimina el aviso. El control es conservador: volver manualmente al valor original sigue contando como edición.
+
+Recargar o cerrar la pestaña usa el aviso nativo del navegador, que necesita una interacción previa y puede ser limitado por el navegador. Atrás/Adelante dentro de la aplicación usa Navigation API en navegadores compatibles. Para equipos operativos usa un navegador actualizado compatible con esta API; los enlaces y el cierre de fichas están protegidos en todos los navegadores soportados por la aplicación.
+
+Cerrar sesión descarta borradores y fotos locales sin confirmación, incluso durante un guardado. Cambiar de cuenta o detectar la revocación del perfil administrativo limpia datos internos, fichas y confirmaciones pendientes. El perfil se vuelve a comprobar en cada actualización administrativa (cada 60 segundos con la pestaña visible y al recuperar el foco).
+
+### Programación y exportación
+
+Desde Calendario selecciona una fecha y el período **Diaria** o **Semanal**. La semana va de lunes a domingo e incluye la fecha seleccionada. El informe usa los filtros actuales de nombre/patente, tipo y vehículo. **Exportar CSV** descarga el archivo; **Vista imprimible** muestra la misma tabla y su botón **Imprimir**. Horarios completos en America/Santiago, con fecha y hora de inicio y término: los viajes que cruzan días aparecen una sola vez si intersectan el período y mantienen sus horarios reales.
+
+Las canceladas se excluyen por defecto. Solo en administración se puede seleccionar **Incluir canceladas**; su estado figura en el informe. Ambos informes incluyen vehículo, patente, horario, tipo y estado. Responsable, destino y contacto aparecen exclusivamente en administración. La consulta pública no consulta ni exporta campos internos, aunque haya una sesión administrativa abierta en otra sección. CSV usa UTF-8, comillas y neutralización de prefijos de fórmulas; abrirlo como texto conserva exactamente los campos entre comillas.
+
 ## Demostración
 
 Sin variables de Supabase aparece un aviso de demostración y una entrada administrativa de prueba. Los datos son ficticios y se guardan únicamente en ese navegador. No usar para operación municipal real: no ofrece autenticación ni concurrencia entre equipos. Al conectar Supabase se desactiva automáticamente el modo de demostración; sus datos no se importan.

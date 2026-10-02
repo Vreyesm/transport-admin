@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Bus,
   CalendarDays,
@@ -42,7 +43,12 @@ import { saveVehicleDraft } from "@/modules/fleet/repository";
 import { OccupationDates } from "./occupation-dates";
 import { SettingsForm } from "./settings-form";
 
-type Section = "calendar" | "fleet" | "settings";
+import { AuditView } from "./audit-view";
+import { ScheduleExport } from "./schedule-export";
+import { useUnsaved } from "./use-unsaved";
+import { AccessRevokedError } from "@/lib/access";
+
+type Section = "calendar" | "fleet" | "settings" | "audit";
 const empty: Data = {
   vehicles: [],
   occupations: [],
@@ -71,6 +77,9 @@ export default function TransportApp({
     [busy, setBusy] = useState(false),
     [allDay, setAllDay] = useState(false);
   const canEdit = admin && authorized;
+  const unsaved = useUnsaved(canEdit);
+  const router = useRouter();
+  const clearUnsaved = unsaved.clear;
   const access = useRef(false);
   const [sessionEpoch, setSessionEpoch] = useState(0);
   const requests = useRef(new RequestScope());
@@ -84,6 +93,7 @@ export default function TransportApp({
     pendingPhotos.current.clear();
   }, []);
   const resetAccess = useCallback(() => {
+    clearUnsaved();
     access.current = false;
     requests.current.invalidate();
     checks.current.invalidate();
@@ -97,7 +107,7 @@ export default function TransportApp({
     setOccupation(null);
     setSessionEpoch((epoch) => epoch + 1);
     clearPhotos();
-  }, [clearPhotos]);
+  }, [clearPhotos, clearUnsaved]);
   const refresh = useCallback(async () => {
     const ticket = requests.current.begin();
     try {
@@ -109,12 +119,17 @@ export default function TransportApp({
       setError("");
     } catch (e) {
       if (!ticket.current()) return;
+      if (e instanceof AccessRevokedError) {
+        resetAccess();
+        setError(message(e));
+        return;
+      }
       setError(message(e));
       setStale(true);
     } finally {
       if (ticket.current()) setReady(true);
     }
-  }, [canEdit]);
+  }, [canEdit, resetAccess]);
   useEffect(() => {
     const scope = requests.current;
     const authChecks = checks.current;
@@ -247,6 +262,7 @@ export default function TransportApp({
       if (!ticket.sameScope()) return;
       await refresh();
       if (!ticket.sameScope()) return;
+      unsaved.clear();
       setNotice(warning || "Cambios guardados");
       clearPhotos();
       setVehicle(null);
@@ -287,6 +303,27 @@ export default function TransportApp({
   return (
     <div
       className="app"
+      onClickCapture={(e) => {
+        const link = (e.target as HTMLElement).closest(
+          "a[href]",
+        ) as HTMLAnchorElement | null;
+        if (
+          !link ||
+          e.ctrlKey ||
+          e.metaKey ||
+          e.shiftKey ||
+          e.altKey ||
+          link.target === "_blank" ||
+          !unsaved.isDirty()
+        )
+          return;
+        e.preventDefault();
+        e.stopPropagation();
+        unsaved.request(() => {
+          unsaved.clear();
+          router.push(link.href);
+        });
+      }}
       style={{ "--accent": data.settings.color } as React.CSSProperties}
     >
       <aside className="sidebar">
@@ -311,6 +348,14 @@ export default function TransportApp({
         </div>
         <div className="nav-label">PRINCIPAL</div>
         <nav>
+          {canEdit && (
+            <Link
+              href="/admin/auditoria"
+              className={section === "audit" ? "active" : ""}
+            >
+              Auditoría
+            </Link>
+          )}
           <Link
             className={section === "calendar" ? "active" : ""}
             href={admin ? "/admin" : "/calendario"}
@@ -359,7 +404,9 @@ export default function TransportApp({
               ? "Calendario"
               : section === "fleet"
                 ? "Flota"
-                : "Configuración"}
+                : section === "audit"
+                  ? "Auditoría"
+                  : "Configuración"}
           </span>
           <div className="top-actions">
             <span className={stale ? "live-dot stale" : "live-dot"} />
@@ -371,7 +418,6 @@ export default function TransportApp({
             {canEdit && (
               <button
                 title="Cerrar sesión"
-                disabled={busy}
                 onClick={async () => {
                   resetAccess();
                   if (supabase) {
@@ -397,17 +443,21 @@ export default function TransportApp({
                   ? "Calendario de disponibilidad"
                   : section === "fleet"
                     ? "Flota de vehículos"
-                    : "Configuración municipal"}
+                    : section === "audit"
+                      ? "Auditoría administrativa"
+                      : "Configuración municipal"}
               </h1>
               <p>
                 {section === "calendar"
                   ? "Consulta y organiza el uso de buses y minibuses municipales."
                   : section === "fleet"
                     ? "Toda la información de tus vehículos, en un solo lugar."
-                    : "Personaliza la identidad de esta instalación."}
+                    : section === "audit"
+                      ? "Revisa quién modificó los registros y sus valores anteriores y nuevos."
+                      : "Personaliza la identidad de esta instalación."}
               </p>
             </div>
-            {canEdit && section !== "settings" && (
+            {canEdit && (section === "fleet" || section === "calendar") && (
               <Button
                 onClick={() =>
                   section === "fleet"
@@ -520,7 +570,7 @@ export default function TransportApp({
             <div className="panel loading">Cargando transportes…</div>
           ) : (
             <>
-              {section !== "settings" && (
+              {(section === "fleet" || section === "calendar") && (
                 <>
                   <div className="stats">
                     <Stat
@@ -609,6 +659,20 @@ export default function TransportApp({
                     )}
                   </div>
                 </>
+              )}
+              {section === "audit" && canEdit && (
+                <AuditView key={sessionEpoch} />
+              )}
+              {section === "calendar" && (
+                <ScheduleExport
+                  key={view + sessionEpoch}
+                  occupations={data.occupations}
+                  vehicles={vehicles}
+                  date={date}
+                  changeDate={setDate}
+                  weekly={view === "week"}
+                  admin={canEdit}
+                />
               )}
               {section === "calendar" && (
                 <section className="panel calendar">
@@ -859,6 +923,7 @@ export default function TransportApp({
                   <SettingsForm
                     key={settingsEditor}
                     initial={data.settings}
+                    changed={unsaved.mark}
                     busy={busy}
                     save={(settings) =>
                       void mutate(() => saveSettings(settings))
@@ -921,10 +986,12 @@ export default function TransportApp({
         <Modal
           title={canEdit ? "Ficha del vehículo" : vehicle.name}
           close={() => {
-            if (!busy) {
-              clearPhotos();
-              setVehicle(null);
-            }
+            if (!busy)
+              unsaved.request(() => {
+                unsaved.clear();
+                clearPhotos();
+                setVehicle(null);
+              });
           }}
         >
           {error && (
@@ -933,6 +1000,8 @@ export default function TransportApp({
             </div>
           )}
           <form
+            onInput={unsaved.mark}
+            onChange={unsaved.mark}
             onSubmit={(e) => {
               e.preventDefault();
               const f = new FormData(e.currentTarget);
@@ -1027,15 +1096,16 @@ export default function TransportApp({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() =>
+                        onClick={() => {
+                          unsaved.mark();
                           setVehicle({
                             ...vehicle,
                             photos: [
                               url,
                               ...vehicle.photos.filter((x) => x !== url),
                             ],
-                          })
-                        }
+                          });
+                        }}
                       >
                         {i === 0 ? "Principal" : "Usar principal"}
                       </button>
@@ -1043,12 +1113,13 @@ export default function TransportApp({
                         type="button"
                         disabled={busy}
                         aria-label="Eliminar foto"
-                        onClick={() =>
+                        onClick={() => {
+                          unsaved.mark();
                           setVehicle({
                             ...vehicle,
                             photos: vehicle.photos.filter((x) => x !== url),
-                          })
-                        }
+                          });
+                        }}
                       >
                         <X size={14} />
                       </button>
@@ -1072,6 +1143,7 @@ export default function TransportApp({
                         validatePhoto(file);
                         const url = URL.createObjectURL(file);
                         pendingPhotos.current.set(url, file);
+                        unsaved.mark();
                         setVehicle({
                           ...vehicle,
                           photos: [...vehicle.photos, url],
@@ -1117,7 +1189,11 @@ export default function TransportApp({
             canEdit ? "Asignación de vehículo" : "Disponibilidad del vehículo"
           }
           close={() => {
-            if (!busy) setOccupation(null);
+            if (!busy)
+              unsaved.request(() => {
+                unsaved.clear();
+                setOccupation(null);
+              });
           }}
         >
           {error && (
@@ -1127,6 +1203,8 @@ export default function TransportApp({
           )}
           {canEdit ? (
             <form
+              onInput={unsaved.mark}
+              onChange={unsaved.mark}
               onSubmit={(e) => {
                 e.preventDefault();
                 const f = new FormData(e.currentTarget);
@@ -1238,11 +1316,15 @@ export default function TransportApp({
                     occupation.cancelled ||
                     !data.occupations.some((o) => o.id === occupation.id)
                   }
-                  onClick={() =>
-                    void mutate(() =>
-                      saveOccupation({ ...occupation, cancelled: true }),
-                    )
-                  }
+                  onClick={() => {
+                    unsaved.request(
+                      () =>
+                        void mutate(() =>
+                          saveOccupation({ ...occupation, cancelled: true }),
+                        ),
+                      "¿Cancelar esta asignación? Dejará de ocupar el vehículo. Los cambios sin guardar se descartarán.",
+                    );
+                  }}
                 >
                   Cancelar asignación
                 </Button>
@@ -1269,6 +1351,17 @@ export default function TransportApp({
               </p>
             </div>
           )}
+        </Modal>
+      )}
+      {unsaved.pending && (
+        <Modal title="Confirmar acción" close={unsaved.reject}>
+          <p>{unsaved.pending.message}</p>
+          <div className="modal-actions">
+            <Button variant="outline" onClick={unsaved.reject}>
+              Seguir editando
+            </Button>
+            <Button onClick={unsaved.accept}>Confirmar y descartar</Button>
+          </div>
         </Modal>
       )}
     </div>
@@ -1335,14 +1428,17 @@ function Modal({
   children: React.ReactNode;
 }) {
   const closeRef = useRef(close);
+  const modalRef = useRef<HTMLElement>(null);
   useEffect(() => {
     closeRef.current = close;
   }, [close]);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    const modal = document.querySelector<HTMLElement>(".modal");
+    const modal = modalRef.current;
     modal?.querySelector<HTMLElement>("button,input,select,textarea")?.focus();
     const fn = (e: KeyboardEvent) => {
+      if (Array.from(document.querySelectorAll(".modal")).at(-1) !== modal)
+        return;
       if (e.key === "Escape") closeRef.current();
       if (e.key === "Tab") {
         const elements = Array.from(
@@ -1375,6 +1471,7 @@ function Modal({
       }}
     >
       <section
+        ref={modalRef}
         className="modal"
         role="dialog"
         aria-modal="true"

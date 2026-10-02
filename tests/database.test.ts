@@ -22,6 +22,12 @@ test("migration, overlap constraints, audit, and public permissions", async () =
       ),
     );
     await db.exec(await readFile("supabase/seed.sql", "utf8"));
+    await db.exec(
+      await readFile(
+        "supabase/migrations/202610020002_audit_indexes.sql",
+        "utf8",
+      ),
+    );
     const vehicle = "22222222-2222-4222-8222-222222222222";
     await db.query("update public.vehicles set photos=$1 where id=$2", [
       JSON.stringify(["https://example.test/photo.jpg"]),
@@ -88,6 +94,11 @@ test("migration, overlap constraints, audit, and public permissions", async () =
     const serialized = JSON.stringify(pub.rows);
     assert.ok(!serialized.includes("PRIVATE"));
     assert.ok(!serialized.includes("organization"));
+    assert.ok(!serialized.includes("audit_log"));
+    await assert.rejects(
+      db.exec("select * from public.audit_log"),
+      /permission denied/,
+    );
     assert.ok(!serialized.includes('cancelled":true'));
     await assert.rejects(
       db.exec("select * from public.occupations"),
@@ -105,6 +116,10 @@ test("migration, overlap constraints, audit, and public permissions", async () =
     );
     const blocked = await db.query("select * from public.occupations");
     assert.equal(blocked.rows.length, 0);
+    assert.equal(
+      (await db.query("select * from public.audit_log")).rows.length,
+      0,
+    );
     await assert.rejects(
       insert("2027-02-01T12:00Z", "2027-02-01T15:00Z"),
       /row-level security/,
@@ -115,6 +130,23 @@ test("migration, overlap constraints, audit, and public permissions", async () =
     const allowed = await db.query("select * from public.occupations");
     assert.ok(allowed.rows.length > 0);
     await insert("2027-02-01T12:00Z", "2027-02-01T15:00Z");
+    const attributed = await db.query<{
+      actor: string;
+      before_data: unknown;
+      after_data: { contact: string };
+    }>(
+      "select actor,before_data,after_data from public.audit_log where actor=$1 and operation='INSERT' order by id desc limit 1",
+      [admin],
+    );
+    assert.equal(attributed.rows[0].actor, admin);
+    assert.equal(attributed.rows[0].before_data, null);
+    assert.equal(attributed.rows[0].after_data.contact, "PRIVATE-CONTACT");
+    await assert.rejects(
+      db.exec(
+        "insert into public.audit_log(entity,record_id,operation) values('vehicles','fake','INSERT')",
+      ),
+      /permission denied/,
+    );
     const snapshot = await db.query<{ id: string; version: number }>(
       "select id,version from public.occupations where vehicle_id=$1 and not cancelled limit 1",
       [vehicle],
