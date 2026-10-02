@@ -7,6 +7,8 @@ services:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     environment:
       WATCHPACK_POLLING: "true"
+      SUPABASE_DB_URL: "postgresql://postgres@supabase_db_transport-admin:5432/postgres"
+      SUPABASE_DB_PASSWORD: "postgres"
     env_file:
       - path: .env.docker.local
     volumes:
@@ -16,6 +18,13 @@ services:
     # Refresh dependencies when the lockfile changes, including existing volumes.
     command: sh -c "npm ci && npm run dev -- --hostname 0.0.0.0 --webpack"
     init: true
+    networks:
+      - supabase
+
+networks:
+  supabase:
+    external: true
+    name: supabase_network_transport-admin
 
 volumes:
   node_modules:

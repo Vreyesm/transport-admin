@@ -11,8 +11,8 @@ En Linux, con Bash, Docker Engine + Compose v2 (o Docker Desktop) y Node.js 24/n
 ```
 
 El script inicia PostgreSQL 17, API, Auth, Storage y Studio usando la CLI
-Supabase fijada a 2.119.0, aplica las migraciones, crea únicamente un
-administrador local y levanta la aplicación con Docker Compose.
+Supabase fijada a 2.119.0, aplica las migraciones y levanta la aplicación
+con Docker Compose. Los seeds no se cargan automáticamente.
 No necesita cuenta de Supabase ni modifica la base remota.
 El primer inicio descarga las imágenes y requiere internet.
 
@@ -20,11 +20,14 @@ El primer inicio descarga las imágenes y requiere internet.
 - Studio (administración de la base local): http://localhost:54323
 - API local: http://127.0.0.1:54321
 - PostgreSQL: `localhost:54322`, base `postgres`, usuario `postgres`, contraseña `postgres`
-- Administrador de prueba local: `admin@transport-admin.cl` / `demotransporte`
+- Administrador de prueba local, solo con `--seed-admin`: `admin@transport-admin.cl` / `demotransporte`
 
 `.env.docker.local` contiene solamente URL y clave pública locales y está
 ignorado por Git. `.env.local` del entorno remoto se conserva.
-Las cuentas y datos de Vercel/Supabase remoto no se copian. El inicio automático solo carga el administrador de `supabase/seed-admin.json` mediante Auth; no carga buses ni asignaciones.
+Las cuentas y datos de Vercel/Supabase remoto no se copian. Para crear opcionalmente
+el administrador de `supabase/seed-admin.json` mediante Auth, ejecuta
+`./scripts/start-local.sh --seed-admin`. Sin esa opción se conservan las cuentas existentes
+y no se crea ninguna. Puedes crear y habilitar tus propias cuentas desde Studio.
 Los datos y fotos persisten en volúmenes Docker. Para detener sin borrarlos:
 
 ```bash
@@ -33,7 +36,8 @@ Los datos y fotos persisten en volúmenes Docker. Para detener sin borrarlos:
 
 Repite el script de inicio para volver a levantarlo. Para aplicar nuevas
 migraciones sin borrar datos: `npx --yes supabase@2.119.0 migration up --local`.
-No uses `supabase db reset` salvo que quieras borrar y recrear la base local. Tras un reset, ejecuta `./scripts/start-local.sh` para volver a crear el administrador.
+No uses `supabase db reset` salvo que quieras borrar y recrear la base local. Tras un reset,
+ejecuta `./scripts/start-local.sh --seed-admin` si quieres volver a crear el administrador de prueba.
 
 
 Para cargar buses y asignaciones de ejemplo explícitamente:
@@ -56,11 +60,29 @@ cp .env.example .env.local
 npm run dev
 ```
 
+`npm run dev` aplica automáticamente las migraciones pendientes antes de arrancar.
+Sin configuración de Supabase conserva el modo demostración. Con Supabase, configura
+también `SUPABASE_DB_URL` y `SUPABASE_DB_PASSWORD` en `.env.local`; son secretos privados
+y nunca deben tener prefijo `NEXT_PUBLIC_`. Para la base local usa
+`SUPABASE_DB_URL=postgresql://postgres@127.0.0.1:54322/postgres` y
+`SUPABASE_DB_PASSWORD=postgres`. Inicia Supabase antes de ejecutar la aplicación.
+Para Supabase remoto usa la conexión directa o el session pooler del mismo proyecto
+(contraseña de PostgreSQL, no una API key). La conexión remota exige TLS.
+El arranque se cancela si falta la conexión, apunta a otro proyecto o falla una migración.
+No se ejecutan seeds, resets ni reparaciones automáticas del historial.
+
+Para aplicar migraciones explícitamente: `npm run db:migrate`.
+En despliegues ejecútalo antes del build con las credenciales privadas disponibles;
+en producción el contenedor standalone solo sirve la aplicación.
+Si aplicaste SQL manualmente, comprueba el esquema y sincroniza una vez el historial
+con `supabase migration list` / `supabase migration repair` antes de usar este flujo.
+Marca como aplicadas únicamente migraciones cuyo contenido ya exista en la base.
+
 Abre http://localhost:3000. Sin variables de Supabase funciona en **modo demostración**, con datos ficticios locales y acceso administrativo de prueba. No sirve como autenticación de producción. Los datos de demostración no se transfieren a Supabase.
 
 ## Conectar Supabase
 
-1. Crea un proyecto Supabase. Ejecuta en SQL Editor, en orden, los archivos de `supabase/migrations/`. También pueden aplicarse con Supabase CLI y su flujo habitual de migraciones. No vuelvas a ejecutarlos en un proyecto ya migrado.
+1. Crea un proyecto Supabase. Configura la conexión privada indicada arriba y ejecuta `npm run db:migrate` (también se ejecuta antes de `npm run dev`). La CLI registra el historial y aplica solo las migraciones pendientes de `supabase/migrations/`, en orden. No vuelvas a ejecutar SQL de migraciones ya aplicadas.
 2. Opcionalmente, solo en desarrollo, ejecuta `supabase/seed-demo.sql` para cargar buses y asignaciones ficticios. Es manual, aditivo e idempotente: no modifica registros existentes y omite ejemplos en conflicto.
 3. Copia la URL y la clave pública **publishable** (o anon/legacy JWT) del proyecto a `.env.local`:
 
@@ -145,7 +167,9 @@ Abre http://localhost:3000. La raíz redirige al calendario de la aplicación.
 Compose carga `.env.docker.local`, generado por el script de inicio local.
 El script conserva `.env.local` para el entorno remoto.
 Se usa Webpack con polling para recargar cambios desde Windows y volúmenes
-separados para dependencias y caché. Al arrancar se actualizan las dependencias con `npm ci`.
+separados para dependencias y caché. Al arrancar se actualizan las dependencias con `npm ci`
+y se aplican las migraciones pendientes a PostgreSQL local a través de la red de Supabase.
+Si la base no está disponible o falla una migración, la aplicación no arranca.
 
 Para detener: `docker compose down`. Para cambiar el puerto en Linux, usa `APP_PORT=3001 ./scripts/start-local.sh`.
 
@@ -153,4 +177,4 @@ La imagen de producción admite las variables públicas como build args según
 la sección de despliegue. El target por defecto es `production`.
 ## Actualizar una instalación existente
 
-Antes de desplegar estos fixes, aplica `supabase/migrations/202610020001_safe_updates.sql` después de las dos migraciones iniciales. Agrega versiones a vehículos, asignaciones y configuración, protege el archivado con compromisos pendientes y evita eliminar fotos en uso. El nuevo cliente requiere esta migración; no despliegues el cliente sobre el esquema anterior.
+Aplica `supabase/migrations/202610020001_safe_updates.sql` después de las dos migraciones iniciales. Agrega versiones a vehículos, asignaciones y configuración, protege el archivado con compromisos pendientes y evita eliminar fotos en uso. Si falta esta migración, el calendario administrativo carga los datos en modo consulta; la edición queda deshabilitada. Aplica la migración pendiente y recarga la página para habilitarla. No vuelvas a ejecutar migraciones ya aplicadas.

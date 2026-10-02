@@ -65,6 +65,7 @@ export default function TransportApp({
     [authorized, setAuthorized] = useState(false),
     [ready, setReady] = useState(false),
     [error, setError] = useState(""),
+    [loadError, setLoadError] = useState(""),
     [notice, setNotice] = useState("");
   const [date, setDate] = useState(() => localDate(new Date())),
     [view, setView] = useState("month"),
@@ -76,7 +77,9 @@ export default function TransportApp({
     [occupation, setOccupation] = useState<Occupation | null>(null),
     [busy, setBusy] = useState(false),
     [allDay, setAllDay] = useState(false);
-  const canEdit = admin && authorized;
+  const canAdmin = admin && authorized;
+  const [adminLoaded, setAdminLoaded] = useState(false);
+  const canEdit = canAdmin && adminLoaded && !data.requiresMigration;
   const unsaved = useUnsaved(canEdit);
   const router = useRouter();
   const clearUnsaved = unsaved.clear;
@@ -98,10 +101,13 @@ export default function TransportApp({
     requests.current.invalidate();
     checks.current.invalidate();
     setAuthorized(false);
+    setAdminLoaded(false);
     setBusy(false);
     setData(empty);
     setReady(false);
     setLastUpdated(null);
+    setError("");
+    setLoadError("");
     setStale(false);
     setNotice("");
     setVehicle(null);
@@ -112,12 +118,13 @@ export default function TransportApp({
   const refresh = useCallback(async () => {
     const ticket = requests.current.begin();
     try {
-      const loaded = await loadData(canEdit && access.current);
+      const loaded = await loadData(canAdmin && access.current);
       if (!ticket.current()) return;
       setData(loaded);
+      setAdminLoaded(canAdmin && access.current);
       setLastUpdated(new Date().toISOString());
       setStale(false);
-      setError("");
+      setLoadError("");
     } catch (e) {
       if (!ticket.current()) return;
       if (e instanceof AccessRevokedError) {
@@ -125,12 +132,12 @@ export default function TransportApp({
         setError(message(e));
         return;
       }
-      setError(message(e));
+      setLoadError(message(e));
       setStale(true);
     } finally {
       if (ticket.current()) setReady(true);
     }
-  }, [canEdit, resetAccess]);
+  }, [canAdmin, resetAccess]);
   useEffect(() => {
     const scope = requests.current;
     const authChecks = checks.current;
@@ -255,6 +262,9 @@ export default function TransportApp({
           : "Libre";
   }
   async function mutate(action: () => Promise<void | string>) {
+    if (!canEdit) {
+      return;
+    }
     const ticket = requests.current.begin();
     setBusy(true);
     setError("");
@@ -416,7 +426,7 @@ export default function TransportApp({
               : lastUpdated
                 ? `Actualizado ${new Date(lastUpdated).toLocaleTimeString("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit" })}`
                 : "Cargando información…"}
-            {canEdit && (
+            {canAdmin && (
               <button
                 title="Cerrar sesión"
                 onClick={async () => {
@@ -491,9 +501,9 @@ export default function TransportApp({
               Conecta Supabase para uso real.
             </div>
           )}
-          {error && (
+          {(error || (lastUpdated && loadError)) && (
             <div className="alert" role="alert">
-              {error}
+              {error || loadError}
             </div>
           )}
           {notice && (
@@ -567,7 +577,7 @@ export default function TransportApp({
                 </Button>
               )}
             </section>
-          ) : !ready ? (
+          ) : !ready && section !== "calendar" ? (
             <div className="panel loading">Cargando transportes…</div>
           ) : (
             <>
