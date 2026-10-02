@@ -2,7 +2,51 @@
 
 Aplicación en español para administrar buses y minibuses, reservas y bloqueos por mantenimiento. Next.js App Router, TypeScript, Tailwind, componentes con convenciones shadcn/ui, Supabase Auth/PostgreSQL/Storage. Una municipalidad por instalación.
 
-## Ejecutar localmente
+## PostgreSQL y Supabase en Docker (entorno local completo)
+
+Con Docker Desktop y Node.js/npm disponibles para ejecutar la CLI:
+
+```powershell
+./scripts/start-local.ps1
+```
+
+El script inicia PostgreSQL 17, API, Auth, Storage y Studio usando la CLI
+Supabase fijada a 2.119.0, aplica las migraciones, crea únicamente un
+administrador local y levanta la aplicación con Docker Compose.
+No necesita cuenta de Supabase ni modifica la base remota.
+El primer inicio descarga las imágenes y requiere internet.
+
+- Aplicación: http://localhost:3000
+- Studio (administración de la base local): http://localhost:54323
+- API local: http://127.0.0.1:54321
+- PostgreSQL: `localhost:54322`, base `postgres`, usuario `postgres`, contraseña `postgres`
+- Administrador de prueba local: `admin@transport-admin.cl` / `demotransporte`
+
+`.env.docker.local` contiene solamente URL y clave pública locales y está
+ignorado por Git. `.env.local` del entorno remoto se conserva.
+Las cuentas y datos de Vercel/Supabase remoto no se copian. El inicio automático solo carga el administrador de `supabase/seed-admin.json` mediante Auth; no carga buses ni asignaciones.
+Los datos y fotos persisten en volúmenes Docker. Para detener sin borrarlos:
+
+```powershell
+./scripts/stop-local.ps1
+```
+
+Repite el script de inicio para volver a levantarlo. Para aplicar nuevas
+migraciones sin borrar datos: `npx --yes supabase@2.119.0 migration up --local`.
+No uses `supabase db reset` salvo que quieras borrar y recrear la base local. Tras un reset, ejecuta `./scripts/start-local.ps1` para volver a crear el administrador.
+
+
+Para cargar buses y asignaciones de ejemplo explícitamente:
+
+```powershell
+./scripts/seed-demo.ps1
+```
+
+Este comando aplica `supabase/seed-demo.sql` únicamente a PostgreSQL local.
+No se ejecuta al iniciar ni al reiniciar. Cambiar el seed no elimina los datos
+ya existentes en un volumen: los ejemplos cargados anteriormente permanecen.
+
+## Ejecutar localmente sin Docker
 
 Requiere Node.js 24 y npm.
 
@@ -17,7 +61,7 @@ Abre http://localhost:3000. Sin variables de Supabase funciona en **modo demostr
 ## Conectar Supabase
 
 1. Crea un proyecto Supabase. Ejecuta en SQL Editor, en orden, los archivos de `supabase/migrations/`. También pueden aplicarse con Supabase CLI y su flujo habitual de migraciones. No vuelvas a ejecutarlos en un proyecto ya migrado.
-2. Solo en desarrollo, ejecuta `supabase/seed.sql` y luego `supabase/seed-usage.sql` para cargar ejemplos ficticios. El segundo agrega dos vehículos y 27 viajes/bloqueos del mes actual en Chile, incluidos viajes de varios días, día completo, horarios consecutivos y una cancelación. Es aditivo e idempotente: no modifica registros existentes y omite ejemplos en conflicto.
+2. Opcionalmente, solo en desarrollo, ejecuta `supabase/seed-demo.sql` para cargar buses y asignaciones ficticios. Es manual, aditivo e idempotente: no modifica registros existentes y omite ejemplos en conflicto.
 3. Copia la URL y la clave pública **publishable** (o anon/legacy JWT) del proyecto a `.env.local`:
 
 ```dotenv
@@ -59,7 +103,13 @@ npm run build
 
 Las pruebas ejecutan PostgreSQL embebido con PGlite y `btree_gist`. Aplican las migraciones y prueban cruces, reservas consecutivas, inserciones competidoras, cancelaciones, patentes, archivo, fotos, auditoría, RPC pública, permisos anónimos y RLS administrativa. Auth y Storage se representan con esquemas mínimos para esas pruebas; no sustituyen una prueba de integración contra Supabase real. Las pruebas de tiempo comprueban verano, invierno y horas inexistentes por cambio de horario chileno. Las horas repetidas al volver al horario de invierno se resuelven a la primera ocurrencia que encuentra el conversor; no se permite elegir el offset desde la interfaz.
 
-## Despliegue económico
+## Producción
+
+La aplicación usa Supabase para datos, autenticación y fotos. Puedes usar Supabase administrado o autoalojado mediante su [configuración oficial de Docker Compose](https://supabase.com/docs/guides/self-hosting/docker). PostgreSQL por sí solo no sustituye Auth, Storage ni la API.
+
+Los scripts locales y el Compose de este repositorio son para desarrollo: ejecutan `next dev` y usan credenciales de prueba. No se deben exponer como entorno productivo. Para producción usa el target `production` del Dockerfile, HTTPS, secretos propios, volúmenes persistentes y respaldos de la base y las fotos. No cargues el administrador de prueba ni el seed de demostración en producción.
+
+### Despliegue económico
 
 Puedes alojar Next.js en cualquier servicio compatible con Node.js y usar Supabase administrado. No requiere workers ni servicios adicionales. La demo usa Vercel Hobby y Supabase Free; consulta su configuración en [docs/DEMO.md](docs/DEMO.md).
 
@@ -81,3 +131,24 @@ Configura respaldos y retención según las capacidades del plan Supabase elegid
 ## Manual
 
 Consulta [el manual en español](docs/MANUAL.md). Conductores, documentos, solicitudes, recurrencias y notificaciones quedan para módulos futuros.
+
+## Comandos de la aplicación en Docker
+
+Después de iniciar el entorno completo con `./scripts/start-local.ps1`, puedes administrar solo la aplicación:
+
+```bash
+docker compose up --build -d
+docker compose logs -f app
+```
+
+Abre http://localhost:3000. La raíz redirige al calendario de la aplicación.
+Compose carga `.env.docker.local`, generado por el script de inicio local.
+El script conserva `.env.local` para el entorno remoto.
+Se usa Webpack con polling para recargar cambios desde Windows y volúmenes
+separados para dependencias y caché. Al arrancar se actualizan las dependencias con `npm ci`.
+
+Para detener: `docker compose down`. Para cambiar el puerto en PowerShell,
+define `$env:APP_PORT = "3001"` antes de levantar Compose.
+
+La imagen de producción admite las variables públicas como build args según
+la sección de despliegue. El target por defecto es `production`.

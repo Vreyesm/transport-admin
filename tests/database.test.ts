@@ -15,7 +15,7 @@ test("migration, overlap constraints, audit, and public permissions", async () =
     await db.exec(
       await readFile("supabase/migrations/202610010002_photos.sql", "utf8"),
     );
-    await db.exec(await readFile("supabase/seed.sql", "utf8"));
+    await db.exec(await readFile("supabase/seed-demo.sql", "utf8"));
     const vehicle = "22222222-2222-4222-8222-222222222222";
     await db.query("update public.vehicles set photos=$1 where id=$2", [
       JSON.stringify(["https://example.test/photo.jpg"]),
