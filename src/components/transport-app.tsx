@@ -571,7 +571,7 @@ export default function TransportApp({
                 </Button>
               )}
             </section>
-          ) : !ready ? (
+          ) : !ready && section !== "calendar" ? (
             <div className="panel loading">Cargando transportes…</div>
           ) : (
             <>
