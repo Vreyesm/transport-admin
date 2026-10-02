@@ -57,4 +57,3 @@ from examples cross join anchor
 where exists(select 1 from public.vehicles v where v.id=vehicle_id::uuid and not v.archived)
 on conflict do nothing;
 commit;
-
