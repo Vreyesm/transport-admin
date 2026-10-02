@@ -15,6 +15,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: bash -n scripts/start-local.sh scripts/stop-local.sh scripts/seed-demo.sh
+      - run: node --check scripts/provision-local.mjs
       - run: npm test
       - run: npm run lint
       - run: npm run build

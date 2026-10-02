@@ -21,7 +21,7 @@ test("migration, overlap constraints, audit, and public permissions", async () =
         "utf8",
       ),
     );
-    await db.exec(await readFile("supabase/seed.sql", "utf8"));
+    await db.exec(await readFile("supabase/seed-demo.sql", "utf8"));
     await db.exec(
       await readFile(
         "supabase/migrations/202610020002_audit_indexes.sql",
