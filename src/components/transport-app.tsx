@@ -98,6 +98,7 @@ export default function TransportApp({
     requests.current.invalidate();
     checks.current.invalidate();
     setAuthorized(false);
+    setBusy(false);
     setData(empty);
     setReady(false);
     setLastUpdated(null);
@@ -271,7 +272,7 @@ export default function TransportApp({
     } catch (e) {
       if (ticket.sameScope()) setError(message(e));
     } finally {
-      setBusy(false);
+      if (ticket.sameScope()) setBusy(false);
     }
   }
   function newOccupation(day = dateKey) {
@@ -1162,17 +1163,25 @@ export default function TransportApp({
                     disabled={
                       busy || !data.vehicles.some((v) => v.id === vehicle.id)
                     }
-                    onClick={() =>
-                      void mutate(() =>
-                        saveVehicle({
-                          ...vehicle,
-                          photos:
-                            data.vehicles.find((v) => v.id === vehicle.id)
-                              ?.photos || [],
-                          archived: !vehicle.archived,
-                        }),
-                      )
-                    }
+                    onClick={() => {
+                      const saved = data.vehicles.find(
+                        (v) => v.id === vehicle.id,
+                      );
+                      if (!saved) return;
+                      unsaved.request(
+                        () =>
+                          void mutate(() =>
+                            saveVehicle({
+                              ...saved,
+                              version: vehicle.version,
+                              archived: !vehicle.archived,
+                            }),
+                          ),
+                        unsaved.isDirty()
+                          ? "¿Descartar los cambios sin guardar y cambiar el estado del vehículo?"
+                          : undefined,
+                      );
+                    }}
                   >
                     {vehicle.archived ? "Reactivar" : "Archivar vehículo"}
                   </Button>

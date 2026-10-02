@@ -9,6 +9,13 @@ export async function saveSettings(s: Settings) {
     localStorage.setItem(KEY, JSON.stringify(d));
     return;
   }
-  const { error } = await supabase.from("settings").update(s).eq("id", 1);
+  // RLS can hide the row and return a successful response with zero updates.
+  // Require the updated row before reporting that the draft was saved.
+  const { error } = await supabase
+    .from("settings")
+    .update(s)
+    .eq("id", 1)
+    .select("id")
+    .single();
   if (error) throw error;
 }
