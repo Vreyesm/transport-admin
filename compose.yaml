@@ -8,8 +8,7 @@ services:
     environment:
       WATCHPACK_POLLING: "true"
     env_file:
-      - path: .env.local
-        required: false
+      - path: .env.docker.local
     volumes:
       - .:/app
       - node_modules:/app/node_modules
