@@ -27,3 +27,7 @@ Consulta [la guía de migración](docs/MIGRACION.md). No se modifica ni elimina 
 `docker compose exec -T postgres pg_dump -U transport -d transport -Fc > transport.dump` (usa un shell que preserve bytes para el formato binario). Incluye fotos, cuentas y sesiones. Conserva también `.env` en un lugar seguro. `docker compose down` conserva el volumen; `down -v` lo elimina.
 
 Prueba de integración contra una instalación aislada: define `TEST_BASE_URL`, `ADMIN_EMAIL` y `ADMIN_PASSWORD`, y ejecuta `node tests/api.integration.mjs`. Esta prueba crea registros ficticios; úsala únicamente en una base de pruebas.
+
+## Desarrollo local en Docker
+
+Configura `.env` y ejecuta `bash scripts/start-local.sh`. El archivo `compose.dev.yaml` agrega recarga automatica y volumenes de dependencias y cache. `bash scripts/stop-local.sh` detiene el entorno conservando los datos. Para cargar ejemplos, ejecuta explicitamente `bash scripts/seed-demo.sh`. Estos scripts usan PostgreSQL del mismo proyecto de Compose.
