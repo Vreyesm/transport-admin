@@ -49,8 +49,6 @@ import { useUnsaved } from "./use-unsaved";
 import { AccessRevokedError } from "@/lib/access";
 
 type Section = "calendar" | "fleet" | "settings" | "audit";
-const migrationMessage =
-  "El calendario está disponible en modo consulta. Para habilitar la edición, el responsable técnico debe aplicar supabase/migrations/202610020001_safe_updates.sql y recargar la página.";
 const empty: Data = {
   vehicles: [],
   occupations: [],
@@ -120,7 +118,7 @@ export default function TransportApp({
       setData(loaded);
       setLastUpdated(new Date().toISOString());
       setStale(false);
-      setError(loaded.requiresMigration ? migrationMessage : "");
+      setError("");
     } catch (e) {
       if (!ticket.current()) return;
       if (e instanceof AccessRevokedError) {
@@ -259,11 +257,6 @@ export default function TransportApp({
   }
   async function mutate(action: () => Promise<void | string>) {
     if (!canEdit) {
-      setError(
-        data.requiresMigration
-          ? migrationMessage
-          : "La edición no está disponible.",
-      );
       return;
     }
     const ticket = requests.current.begin();
@@ -502,7 +495,7 @@ export default function TransportApp({
               Conecta Supabase para uso real.
             </div>
           )}
-          {error && (
+          {error && (lastUpdated || (admin && !authorized)) && (
             <div className="alert" role="alert">
               {error}
             </div>
